@@ -315,6 +315,8 @@
 <absems_data rad="camrt">atm/cam/rad/abs_ems_factors_fastvx.c030508.nc</absems_data>
 
 <!-- CARMA file paths -->
+<carma_emis_file        carma="alumina">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina">atm/waccm/emis/alumina_test_psd.nc</carma_emis_psd_file>
 <carma_emis_file        carma="meteor_smoke">atm/waccm/emis/meteor_smoke_kalashnikova.nc</carma_emis_file>
 <carma_escale_file      carma="meteor_smoke">atm/waccm/emis/smoke_grf_frentzke.nc</carma_escale_file>
 <carma_emis_file        carma="mixed_sulfate">atm/waccm/emis/meteor_smoke_kalashnikova.nc</carma_emis_file>

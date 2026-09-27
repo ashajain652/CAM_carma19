@@ -3618,8 +3618,53 @@ Default: 16.0
 <entry id="carma_emis_file" type="char*256" input_pathname="abs" category="carma_model"
        group="carma_model_nl" valid_values="" >
 Specifies the name of the file containing the meteor smoke emission
-(ablation) profile.
+(ablation) profile. For carma=alumina, this is instead the netCDF file of
+spacecraft reentry alumina emission events (point releases of Al2O3 mass
+in kg at given date, lat/lon and altitude above ground).
 Default: set by build-namelist.
+</entry>
+
+<entry id="carma_emis_scale" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Multiplier applied to the mass of all alumina emission events (carma=alumina).
+Default: 1.0
+</entry>
+
+<entry id="carma_emis_psd_type" type="char*16" category="carma_model"
+       group="carma_model_nl" valid_values="file,lognormal" >
+Type of particle size distribution used to split alumina emissions across
+CARMA bins (carma=alumina): 'file' uses the altitude-dependent PSD in
+carma_emis_psd_file; 'lognormal' uses carma_emis_rmode and carma_emis_sigma.
+Default: 'file'
+</entry>
+
+<entry id="carma_emis_psd_file" type="char*256" input_pathname="abs" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Specifies the name of the netCDF file containing the altitude-dependent
+particle size distribution (mass fractions per size bin) of emitted
+alumina (carma=alumina).
+Default: set by build-namelist.
+</entry>
+
+<entry id="carma_emis_psd_allow_clip" type="logical" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+If TRUE, a PSD that loses more than 1% of its mass outside the CARMA bin
+range only produces a warning instead of stopping the run (carma=alumina).
+Default: FALSE
+</entry>
+
+<entry id="carma_emis_rmode" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Lognormal mode radius (nm) of emitted alumina. Used only when
+carma_emis_psd_type = 'lognormal' (carma=alumina).
+Default: 2.0
+</entry>
+
+<entry id="carma_emis_sigma" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Lognormal geometric standard deviation of emitted alumina. Used only when
+carma_emis_psd_type = 'lognormal' (carma=alumina).
+Default: 1.5
 </entry>
 
 <entry id="carma_escale_file" type="char*256" input_pathname="abs" category="carma_model"

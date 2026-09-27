@@ -1473,6 +1473,23 @@ elsif ($carma eq 'meteor_impact') {
   add_default($nl, 'carma_fractal_soot',   'val'=>'.false.');
   add_default($nl, 'irad_always',          'val'=>'-48');
 }
+elsif ($carma eq 'alumina') {
+  add_default($nl, 'carma_do_coag',     'val'=>'.true.');
+  add_default($nl, 'carma_do_drydep',   'val'=>'.true.');
+  add_default($nl, 'carma_do_emission', 'val'=>'.true.');
+  add_default($nl, 'carma_do_fixedinit','val'=>'.true.');
+  add_default($nl, 'carma_do_optics',   'val'=>'.false.');
+  add_default($nl, 'carma_do_vdiff',    'val'=>'.true.');
+  add_default($nl, 'carma_do_vtran',    'val'=>'.true.');
+  add_default($nl, 'carma_do_wetdep',   'val'=>'.true.');
+  add_default($nl, 'carma_emis_file');
+  add_default($nl, 'carma_emis_scale',  'val'=>'1.0');
+  add_default($nl, 'carma_emis_psd_type', 'val'=>'file');
+  add_default($nl, 'carma_emis_psd_file');
+  add_default($nl, 'carma_emis_psd_allow_clip', 'val'=>'.false.');
+  add_default($nl, 'carma_emis_rmode',  'val'=>'2.0');
+  add_default($nl, 'carma_emis_sigma',  'val'=>'1.5');
+}
 elsif ($carma eq 'meteor_smoke') {
   add_default($nl, 'carma_do_coag',     'val'=>'.true.');
   add_default($nl, 'carma_do_drydep',   'val'=>'.true.');

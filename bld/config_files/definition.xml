@@ -83,9 +83,9 @@ PBL package: uw (University of Washington), hb (Holtslag and Boville), hbr
 Radiative transfer calculation: 
 camrt (CAM3 and CAM4 RT package), rrtmg (RRTMG package from AER).
 </entry>
-<entry id="carma" valid_values="none,bc_strat,cirrus,cirrus_dust,dust,meteor_impact,meteor_smoke,mixed_sulfate,pmc,pmc_sulfate,sea_salt,sulfate,tholin,test_detrain,test_growth,test_passive,test_radiative,test_swelling,test_tracers,test_tracers2" value="none">
+<entry id="carma" valid_values="none,alumina,bc_strat,cirrus,cirrus_dust,dust,meteor_impact,meteor_smoke,mixed_sulfate,pmc,pmc_sulfate,sea_salt,sulfate,tholin,test_detrain,test_growth,test_passive,test_radiative,test_swelling,test_tracers,test_tracers2" value="none">
 CARMA sectional microphysics: 
-none (disabled), bc_strat (Stratospheric Black Carbon), cirrus (Cirrus Clouds),
+none (disabled), alumina (Spacecraft Reentry Alumina), bc_strat (Stratospheric Black Carbon), cirrus (Cirrus Clouds),
 cirrus_dust (Cirrus Clouds with dust), dust (Dust), meteor_impact (Meteor Impact), 
 meteor_smoke (Meteor Smoke), mixed_sulfate (Meteor Smoke and Sulfate), pmc (Polar Mesospheric Clouds), pmc_sulfate (PMC and Sulfate), sea_salt (Sea Salt),
 sulfate (Sulfate Aerosols), tholin (early earth haze), test_detrain (Detrainment), test_growth (Particle Growth), test_passive (Passive Dust), 

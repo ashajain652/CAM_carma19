@@ -115,7 +115,7 @@ OPTIONS
      -aquaplanet        Switch on aqua-planet mode.
      -build_chem_proc   Switch forces the build of the chemistry preprocessor (primarily for testing).
      -carma <name>      Build CAM with specified CARMA microphysics model
-                        [ none | bc_strat | cirrus | cirrus_dust | dust | meteor_impact |
+                        [ none | alumina | bc_strat | cirrus | cirrus_dust | dust | meteor_impact |
                           meteor_smoke | mixed_sulfate | pmc | pmc_sulfate | sea_salt | sulfate | tholin |
                           test_detrain | test_growth | test_passive | test_radiative | test_swelling |
                           test_tracers, test_tracers2].
@@ -1454,6 +1454,9 @@ elsif ($carma_pkg eq 'meteor_impact') {
 }
 elsif ($carma_pkg eq 'meteor_smoke') {
     $carma_nadv = 28;
+}
+elsif ($carma_pkg eq 'alumina') {
+    $carma_nadv = 36;
 }
 elsif ($carma_pkg eq 'mixed_sulfate') {
     $carma_nadv = 84;
