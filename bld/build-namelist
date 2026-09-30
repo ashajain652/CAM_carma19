@@ -1325,6 +1325,7 @@ if ($carma eq 'bc_strat') {
     }
 }
 
+my $carma_alum_radval = '';
 if ($rrtmg) {
 
   # CARMA Microphysics - RRTMG Only
@@ -1347,6 +1348,15 @@ if ($rrtmg) {
 
     foreach my $val (@val) {
       $radval .= "," . quote_string("A:" . $val . ":" . $carma . "_" . $val . "_rrtmg.nc");
+    }
+  }
+
+  # The alumina bins go into rad_climate or rad_diag_1 (see carma_alumina_rad_feedback),
+  # so they are collected here and added where rad_climate is set.
+  if ($carma eq 'alumina') {
+    foreach my $i (1 .. 36) {
+      my $val = sprintf("CRALUM%02d", $i);
+      $carma_alum_radval .= "," . quote_string("A:" . $val . ":" . $carma . "_" . $val . "_rrtmg.nc");
     }
   }
 
@@ -1478,10 +1488,11 @@ elsif ($carma eq 'alumina') {
   add_default($nl, 'carma_do_drydep',   'val'=>'.true.');
   add_default($nl, 'carma_do_emission', 'val'=>'.true.');
   add_default($nl, 'carma_do_fixedinit','val'=>'.true.');
-  add_default($nl, 'carma_do_optics',   'val'=>'.false.');
+  add_default($nl, 'carma_do_optics',   'val'=>'.true.');
   add_default($nl, 'carma_do_vdiff',    'val'=>'.true.');
   add_default($nl, 'carma_do_vtran',    'val'=>'.true.');
   add_default($nl, 'carma_do_wetdep',   'val'=>'.true.');
+  add_default($nl, 'carma_alumina_rad_feedback', 'val'=>'.true.');
   add_default($nl, 'carma_emis_file');
   add_default($nl, 'carma_emis_scale',  'val'=>'1.0');
   add_default($nl, 'carma_emis_psd_type', 'val'=>'file');
@@ -1747,7 +1758,22 @@ if (defined $nl->get_value('prescribed_strataero_file')) {
 }
 
 if ($rad_pkg ne 'none') {
-    add_default($nl, 'rad_climate', 'val'=>$radval);
+    if ($carma_alum_radval ne '') {
+        # CARMA alumina: rad_climate includes the alumina bins only with feedback on.
+        # The alumina radiative effect is X_d1 - X_d2 from two diagnostic calls that
+        # differ only by the alumina bins. Do not difference against the climate call:
+        # MAM recomputes water uptake for diagnostic lists (modal_aer_opt.F90), so the
+        # climate and diagnostic calls differ even with identical lists.
+        if ($nl->get_value('carma_alumina_rad_feedback') =~ /$TRUE/io) {
+            add_default($nl, 'rad_climate', 'val'=>$radval . $carma_alum_radval);
+        } else {
+            add_default($nl, 'rad_climate', 'val'=>$radval);
+        }
+        add_default($nl, 'rad_diag_1', 'val'=>$radval . $carma_alum_radval);
+        add_default($nl, 'rad_diag_2', 'val'=>$radval);
+    } else {
+        add_default($nl, 'rad_climate', 'val'=>$radval);
+    }
 }
 
 # Cloud optics

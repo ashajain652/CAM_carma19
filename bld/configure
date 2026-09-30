@@ -1498,6 +1498,15 @@ elsif ($carma_pkg eq 'test_tracers2') {
     $carma_nadv = 434;
 }
 
+# The alumina bins (36) are radiatively active and go into rad_climate or rad_diag_1
+# on top of the gases, the MAM modes and the prescribed volcanic aerosol, which is
+# more than the default limit of 30 entries in one list.
+if ($carma_pkg eq 'alumina' and !defined $opts{'max_n_rad_cnst'} and $max_n_rad_cnst < 64) {
+    $max_n_rad_cnst = 64;
+    $cfg_ref->set('max_n_rad_cnst', $max_n_rad_cnst);
+    if ($print>=2) { print "Maximum radiatively active tracers raised for CARMA alumina: $max_n_rad_cnst$eol"; }
+}
+
 
 #-----------------------------------------------------------------------------------------------
 # Number of advected constituents

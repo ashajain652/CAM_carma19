@@ -3667,6 +3667,18 @@ carma_emis_psd_type = 'lognormal' (carma=alumina).
 Default: 1.5
 </entry>
 
+<entry id="carma_alumina_rad_feedback" type="logical" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+If true, the alumina bins (CRALUM01-36) are put in rad_climate, so they affect
+the simulated climate; if false, rad_climate excludes them (forcing only). Either
+way, rad_diag_1 is the climate list with the alumina bins and rad_diag_2 the same
+list without them, so X_d1 - X_d2 (e.g. FSNT_d1 - FSNT_d2) is the alumina
+radiative effect. (Differencing against the climate call is not clean: MAM
+recomputes aerosol water uptake for diagnostic lists.) Applied by build-namelist;
+a user setting of rad_climate, rad_diag_1 or rad_diag_2 overrides it. (carma=alumina)
+Default: TRUE
+</entry>
+
 <entry id="carma_escale_file" type="char*256" input_pathname="abs" category="carma_model"
        group="carma_model_nl" valid_values="" >
 Specifies the name of the file containing the global realtive flux

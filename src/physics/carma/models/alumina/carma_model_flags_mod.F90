@@ -31,6 +31,9 @@ module carma_model_flags_mod
   logical, public                :: carma_emis_psd_allow_clip = .false.             ! only warn if > 1% of PSD mass is clipped
   real(r8), public               :: carma_emis_rmode          = 2.0_r8              ! lognormal mode (number median) radius (nm)
   real(r8), public               :: carma_emis_sigma          = 1.5_r8              ! lognormal geometric standard deviation
+  logical, public                :: carma_alumina_rad_feedback = .true.            ! alumina in rad_climate (always in rad_diag_1,
+                                                                                    ! never in rad_diag_2); acted on by build-namelist,
+                                                                                    ! only reported here
 
 contains
 
@@ -64,7 +67,8 @@ contains
       carma_emis_psd_file, &
       carma_emis_psd_allow_clip, &
       carma_emis_rmode, &
-      carma_emis_sigma
+      carma_emis_sigma, &
+      carma_alumina_rad_feedback
 
     if (masterproc) then
        unitn = getunit()
@@ -88,6 +92,7 @@ contains
     call mpibcast(carma_emis_psd_allow_clip, 1,                        mpilog,  0, mpicom)
     call mpibcast(carma_emis_rmode,          1,                        mpir8,   0, mpicom)
     call mpibcast(carma_emis_sigma,          1,                        mpir8,   0, mpicom)
+    call mpibcast(carma_alumina_rad_feedback, 1,                       mpilog,  0, mpicom)
 #endif
 
   end subroutine carma_model_readnl
