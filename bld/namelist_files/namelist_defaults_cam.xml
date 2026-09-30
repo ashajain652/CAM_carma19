@@ -317,6 +317,27 @@
 <!-- CARMA file paths -->
 <carma_emis_file        carma="alumina">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
 <carma_emis_psd_file    carma="alumina">atm/waccm/emis/alumina_test_psd.nc</carma_emis_psd_file>
+<!-- alumina particle size sensitivity models: monodisperse emission, rmin = emission radius -->
+<carma_emis_file        carma="alumina_d2um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d2um">atm/waccm/emis/alumina_mono_d2um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d6um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d6um">atm/waccm/emis/alumina_mono_d6um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d10um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d10um">atm/waccm/emis/alumina_mono_d10um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d14um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d14um">atm/waccm/emis/alumina_mono_d14um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d18um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d18um">atm/waccm/emis/alumina_mono_d18um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d50um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d50um">atm/waccm/emis/alumina_mono_d50um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d100um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d100um">atm/waccm/emis/alumina_mono_d100um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d150um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d150um">atm/waccm/emis/alumina_mono_d150um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d200um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d200um">atm/waccm/emis/alumina_mono_d200um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d250um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d250um">atm/waccm/emis/alumina_mono_d250um_psd.nc</carma_emis_psd_file>
 <carma_emis_file        carma="meteor_smoke">atm/waccm/emis/meteor_smoke_kalashnikova.nc</carma_emis_file>
 <carma_escale_file      carma="meteor_smoke">atm/waccm/emis/smoke_grf_frentzke.nc</carma_escale_file>
 <carma_emis_file        carma="mixed_sulfate">atm/waccm/emis/meteor_smoke_kalashnikova.nc</carma_emis_file>

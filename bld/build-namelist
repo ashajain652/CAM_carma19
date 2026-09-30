@@ -1352,9 +1352,11 @@ if ($rrtmg) {
   }
 
   # The alumina bins go into rad_climate or rad_diag_1 (see carma_alumina_rad_feedback),
-  # so they are collected here and added where rad_climate is set.
-  if ($carma eq 'alumina') {
-    foreach my $i (1 .. 36) {
+  # so they are collected here and added where rad_climate is set. The alumina_d<D>um
+  # particle size sensitivity models have 16 bins (NBIN in their carma_model_mod.F90).
+  if ($carma =~ /^alumina/) {
+    my $nbin = ($carma eq 'alumina') ? 36 : 16;
+    foreach my $i (1 .. $nbin) {
       my $val = sprintf("CRALUM%02d", $i);
       $carma_alum_radval .= "," . quote_string("A:" . $val . ":" . $carma . "_" . $val . "_rrtmg.nc");
     }
@@ -1483,7 +1485,7 @@ elsif ($carma eq 'meteor_impact') {
   add_default($nl, 'carma_fractal_soot',   'val'=>'.false.');
   add_default($nl, 'irad_always',          'val'=>'-48');
 }
-elsif ($carma eq 'alumina') {
+elsif ($carma =~ /^alumina/) {
   add_default($nl, 'carma_do_coag',     'val'=>'.true.');
   add_default($nl, 'carma_do_drydep',   'val'=>'.true.');
   add_default($nl, 'carma_do_emission', 'val'=>'.true.');
