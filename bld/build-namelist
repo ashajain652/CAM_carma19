@@ -1354,11 +1354,20 @@ if ($rrtmg) {
   # The alumina bins go into rad_climate or rad_diag_1 (see carma_alumina_rad_feedback),
   # so they are collected here and added where rad_climate is set. The alumina_d<D>um
   # particle size sensitivity models have 16 bins (NBIN in their carma_model_mod.F90).
+  #
+  # The base alumina model has CARMA write its optics files into the run directory
+  # (carma_do_optics). The alumina_d<D>um models use optics files pre-built with
+  # tools/carma_optics_offline (CARMA's default Mie routine fails for their large
+  # particles), read from inputdata, and default to carma_do_optics = .false.
   if ($carma =~ /^alumina/) {
     my $nbin = ($carma eq 'alumina') ? 36 : 16;
     foreach my $i (1 .. $nbin) {
       my $val = sprintf("CRALUM%02d", $i);
-      $carma_alum_radval .= "," . quote_string("A:" . $val . ":" . $carma . "_" . $val . "_rrtmg.nc");
+      my $file = $carma . "_" . $val . "_rrtmg.nc";
+      if ($carma ne 'alumina') {
+        $file = set_abs_filepath("atm/cam/physprops/alumina/" . $file, $inputdata_rootdir);
+      }
+      $carma_alum_radval .= "," . quote_string("A:" . $val . ":" . $file);
     }
   }
 
@@ -1490,7 +1499,8 @@ elsif ($carma =~ /^alumina/) {
   add_default($nl, 'carma_do_drydep',   'val'=>'.true.');
   add_default($nl, 'carma_do_emission', 'val'=>'.true.');
   add_default($nl, 'carma_do_fixedinit','val'=>'.true.');
-  add_default($nl, 'carma_do_optics',   'val'=>'.true.');
+  # alumina_d<D>um: optics files are pre-built (see the rad_climate section above).
+  add_default($nl, 'carma_do_optics',   'val'=>($carma eq 'alumina') ? '.true.' : '.false.');
   add_default($nl, 'carma_do_vdiff',    'val'=>'.true.');
   add_default($nl, 'carma_do_vtran',    'val'=>'.true.');
   add_default($nl, 'carma_do_wetdep',   'val'=>'.true.');
