@@ -3630,6 +3630,15 @@ Multiplier applied to the mass of all alumina emission events (carma=alumina).
 Default: 1.0
 </entry>
 
+<entry id="carma_emis_cyclic" type="logical" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+If TRUE, the alumina emission events repeat every model year (carma=alumina).
+Events are matched on month, day and time of day only, so the event file must
+hold a single year of events. Events dated before the run start date do not
+fire. If FALSE, events fire only on their full date (YYYYMMDD).
+Default: FALSE
+</entry>
+
 <entry id="carma_emis_psd_type" type="char*16" category="carma_model"
        group="carma_model_nl" valid_values="file,lognormal" >
 Type of particle size distribution used to split alumina emissions across

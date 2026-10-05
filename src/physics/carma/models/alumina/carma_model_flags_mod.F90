@@ -26,6 +26,7 @@ module carma_model_flags_mod
   ! and default them to an inital value.
   character(len=256), public     :: carma_emis_file           = 'alumina_events.nc' ! event file (netCDF)
   real(r8), public               :: carma_emis_scale          = 1.0_r8              ! multiplier on all event masses
+  logical, public                :: carma_emis_cyclic         = .false.             ! repeat the events every model year
   character(len=16), public      :: carma_emis_psd_type       = 'file'              ! 'file' or 'lognormal'
   character(len=256), public     :: carma_emis_psd_file       = 'alumina_psd.nc'    ! PSD file (netCDF)
   logical, public                :: carma_emis_psd_allow_clip = .false.             ! only warn if > 1% of PSD mass is clipped
@@ -63,6 +64,7 @@ contains
     namelist /carma_model_nl/ &
       carma_emis_file, &
       carma_emis_scale, &
+      carma_emis_cyclic, &
       carma_emis_psd_type, &
       carma_emis_psd_file, &
       carma_emis_psd_allow_clip, &
@@ -87,6 +89,7 @@ contains
 #ifdef SPMD
     call mpibcast(carma_emis_file,           len(carma_emis_file),     mpichar, 0, mpicom)
     call mpibcast(carma_emis_scale,          1,                        mpir8,   0, mpicom)
+    call mpibcast(carma_emis_cyclic,         1,                        mpilog,  0, mpicom)
     call mpibcast(carma_emis_psd_type,       len(carma_emis_psd_type), mpichar, 0, mpicom)
     call mpibcast(carma_emis_psd_file,       len(carma_emis_psd_file), mpichar, 0, mpicom)
     call mpibcast(carma_emis_psd_allow_clip, 1,                        mpilog,  0, mpicom)

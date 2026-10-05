@@ -17,6 +17,10 @@
 !!   altitude(row)  real   altitude above ground (km)
 !!   mass(row)      real   emitted mass (kg)
 !!
+!! If carma_emis_cyclic is true, the events repeat every model year: a row fires on
+!! its month, day and time of day in every year, and its year is ignored. The file
+!! must then hold a single year of events. Rows never fire before the run start date.
+!!
 !! @version Sep-2026
 module alumina_events_mod
 
@@ -24,7 +28,7 @@ module alumina_events_mod
   use spmd_utils,            only: masterproc
   use cam_abortutils,        only: endrun
   use cam_logfile,           only: iulog
-  use carma_model_flags_mod, only: carma_emis_file, carma_emis_scale
+  use carma_model_flags_mod, only: carma_emis_file, carma_emis_scale, carma_emis_cyclic
   use alumina_psd_mod,       only: psd_nbin, alumina_psd_binfrac
 
 #if ( defined SPMD )
@@ -164,8 +168,16 @@ contains
         end if
       end do
 
+      ! Cyclic events are matched on MMDD only, so rows from different years would
+      ! collide.
+      if (carma_emis_cyclic) then
+        if (any(evt_date(:) / 10000 /= evt_date(1) / 10000)) then
+          call endrun('alumina_events_init: carma_emis_cyclic needs all rows in one year.')
+        end if
+      end if
+
       write(iulog,*) 'alumina_events_init: rows = ', evt_nrow, ', total mass (kg) = ', sum(evt_mass), &
-        ', carma_emis_scale = ', carma_emis_scale
+        ', carma_emis_scale = ', carma_emis_scale, ', carma_emis_cyclic = ', carma_emis_cyclic
     end if
 
 #if ( defined SPMD )
@@ -270,16 +282,22 @@ contains
 
       ! Rows before the start of the current timestep will never fire in this run
       ! segment. NOTE: The CESM time manager defines the previous time as the current
-      ! time minus one timestep, even on the first step.
-      call get_prev_date(yr, mon, day, tod)
-      ymd = yr*10000 + mon*100 + day
-      nlate = 0
-      do irow = 1, evt_nrow
-        if (time_lt(evt_date(irow), evt_sec(irow), ymd, tod)) nlate = nlate + 1
-      end do
-      if (nlate > 0) then
-        write(iulog,*) 'alumina_events_init: WARNING - ', nlate, ' rows are before the model time ', &
-          ymd, tod, ' and will not fire in this run segment.'
+      ! time minus one timestep, even on the first step. Cyclic rows fire again in
+      ! the next year, so they are not counted.
+      if (.not. carma_emis_cyclic) then
+        call get_prev_date(yr, mon, day, tod)
+        ymd = yr*10000 + mon*100 + day
+        nlate = 0
+        do irow = 1, evt_nrow
+          if (time_lt(evt_date(irow), evt_sec(irow), ymd, tod)) nlate = nlate + 1
+        end do
+        if (nlate > 0) then
+          write(iulog,*) 'alumina_events_init: WARNING - ', nlate, ' rows are before the model time ', &
+            ymd, tod, ' and will not fire in this run segment.'
+        end if
+      else
+        write(iulog,*) 'alumina_events_init: events repeat every year (year ', evt_date(1) / 10000, &
+          ' in the file is ignored).'
       end if
     end if
 
@@ -294,8 +312,9 @@ contains
   !!
   !!   prev_date (start of step) <= row time < curr_date (end of step)
   !!
-  !! so each row fires exactly once. Dates are compared as (YYYYMMDD, sec) integer
-  !! pairs, which are ordered the same as time in any calendar.
+  !! so each row fires exactly once (once per year if carma_emis_cyclic). Dates are
+  !! compared as (YYYYMMDD, sec) integer pairs, which are ordered the same as time in
+  !! any calendar.
   !!
   !! NOTE: tendency is not reset here; the caller must initialize it.
   !!
@@ -305,7 +324,7 @@ contains
     use ppgrid,        only: pcols, pver, pverp
     use phys_grid,     only: get_area_p
     use physconst,     only: pi, rearth, gravit
-    use time_manager,  only: get_prev_date, get_curr_date, get_nstep
+    use time_manager,  only: get_prev_date, get_curr_date, get_start_date, get_nstep
 
     type(physics_state), intent(in)     :: state                 !! physics state
     integer, intent(in)                 :: ibin                  !! bin index
@@ -320,6 +339,9 @@ contains
     integer                             :: yr, mon, day
     integer                             :: prev_ymd, prev_tod    ! start of the timestep
     integer                             :: curr_ymd, curr_tod    ! end of the timestep
+    integer                             :: start_ymd, start_tod  ! start of the run
+    integer                             :: prev_yr, curr_yr      ! years at the start and end of the timestep
+    integer                             :: fire_ymd              ! date the row fires on (YYYYMMDD)
     real(r8)                            :: alt_m                 ! altitude above ground (m)
     real(r8)                            :: area                  ! column area (m2)
     real(r8)                            :: airmass               ! mass of air in the layer (kg)
@@ -333,16 +355,30 @@ contains
     if (.not. any(evt_lchnk(:) == lchnk)) return
 
     call get_prev_date(yr, mon, day, prev_tod)
+    prev_yr  = yr
     prev_ymd = yr*10000 + mon*100 + day
     call get_curr_date(yr, mon, day, curr_tod)
+    curr_yr  = yr
     curr_ymd = yr*10000 + mon*100 + day
+    call get_start_date(yr, mon, day, start_tod)
+    start_ymd = yr*10000 + mon*100 + day
 
     do irow = 1, evt_nrow
       if (evt_lchnk(irow) /= lchnk) cycle
 
-      ! prev <= t_event < curr
-      if (time_lt(evt_date(irow), evt_sec(irow), prev_ymd, prev_tod)) cycle
-      if (.not. time_lt(evt_date(irow), evt_sec(irow), curr_ymd, curr_tod)) cycle
+      ! prev <= t_event < curr. A cyclic row is tried in the years at both ends of
+      ! the timestep, which covers a step across the new year. It does not fire before
+      ! the run start, so the first step (prev = start - dt) can't fire a row twice.
+      if (carma_emis_cyclic) then
+        fire_ymd = prev_yr*10000 + mod(evt_date(irow), 10000)
+        if (.not. fires(fire_ymd, evt_sec(irow))) then
+          fire_ymd = curr_yr*10000 + mod(evt_date(irow), 10000)
+          if ((curr_yr == prev_yr) .or. (.not. fires(fire_ymd, evt_sec(irow)))) cycle
+        end if
+      else
+        fire_ymd = evt_date(irow)
+        if (.not. fires(fire_ymd, evt_sec(irow))) cycle
+      end if
 
       icol  = evt_icol(irow)
       alt_m = evt_alt(irow) * 1000._r8
@@ -374,13 +410,27 @@ contains
       if (ibin == 1) then
         write(iulog,'(a,i8,a,i6,a,i8,a,i10,i7,a,f9.3,a,2f10.4,a,i8,a,i4,a,es14.6)') &
           'alumina_events_tendency: nstep ', get_nstep(), ' row ', irow, ' event ', evt_id(irow), &
-          ' date ', evt_date(irow), evt_sec(irow), ' alt (km) ', evt_alt(irow), &
+          ' date ', fire_ymd, evt_sec(irow), ' alt (km) ', evt_alt(irow), &
           ' col lat/lon ', state%lat(icol) * 180._r8 / pi, state%lon(icol) * 180._r8 / pi, &
           ' gcol ', evt_gcol(irow), ' k ', kfound, ' mass (kg) ', evt_mass(irow) * carma_emis_scale
       end if
     end do
 
     return
+
+  contains
+
+    !! True if a row at (ymd, tod) fires in this timestep: prev <= t < curr and
+    !! not before the run start.
+    logical function fires(ymd, tod)
+      integer, intent(in)               :: ymd    !! date (YYYYMMDD)
+      integer, intent(in)               :: tod    !! seconds of the day
+
+      fires = (.not. time_lt(ymd, tod, prev_ymd, prev_tod)) .and. &
+              time_lt(ymd, tod, curr_ymd, curr_tod) .and. &
+              (.not. time_lt(ymd, tod, start_ymd, start_tod))
+    end function fires
+
   end subroutine alumina_events_tendency
 
 

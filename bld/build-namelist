@@ -1507,6 +1507,7 @@ elsif ($carma =~ /^alumina/) {
   add_default($nl, 'carma_alumina_rad_feedback', 'val'=>'.true.');
   add_default($nl, 'carma_emis_file');
   add_default($nl, 'carma_emis_scale',  'val'=>'1.0');
+  add_default($nl, 'carma_emis_cyclic', 'val'=>'.false.');
   add_default($nl, 'carma_emis_psd_type', 'val'=>'file');
   add_default($nl, 'carma_emis_psd_file');
   add_default($nl, 'carma_emis_psd_allow_clip', 'val'=>'.false.');
