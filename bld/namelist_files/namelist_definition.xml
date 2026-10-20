@@ -3599,7 +3599,7 @@ Are the soot particles treated as fractals?
 Default: FALSE
 </entry>
 
-<!-- CARMA model - meteor smoke &amp; pmc -->
+<!-- CARMA model - meteor smoke, pmc &amp; arsenic_msp -->
 
 <entry id="carma_do_escale" type="logical" category="carma_model"
        group="carma_model_nl" valid_values="" >
@@ -3611,15 +3611,57 @@ Default: FALSE
 <entry id="carma_emis_total" type="real" category="carma_model"
        group="carma_model_nl" valid_values="" >
 The total meteor smoke emission rate in kt/year. The flux will be
-scaled to total that value.
+scaled to total that value. Also used by carma=arsenic_msp for the
+smoke that carries the arsenic.
 Default: 16.0
 </entry>
 
 <entry id="carma_emis_file" type="char*256" input_pathname="abs" category="carma_model"
        group="carma_model_nl" valid_values="" >
 Specifies the name of the file containing the meteor smoke emission
-(ablation) profile.
+(ablation) profile. Used by meteor_smoke, mixed_sulfate, pmc, pmc_sulfate
+and arsenic_msp.
 Default: set by build-namelist.
+</entry>
+
+<!-- CARMA model - arsenic_msp (reentry arsenic on meteoric smoke) -->
+
+<entry id="carma_as_emis_total" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Global source of lumped gas-phase arsenic (ASGAS) in Gg As/year
+(carma=arsenic_msp). The source is constant in time and uniform per unit
+area, and is put into the single model layer that contains
+carma_as_emis_alt.
+Default: 4.0
+</entry>
+
+<entry id="carma_as_emis_alt" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Altitude (km above sea level) of the arsenic gas emission layer
+(carma=arsenic_msp).
+Default: 85.0
+</entry>
+
+<entry id="carma_as_gamma" type="real" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+Uptake (sticking) coefficient, 0 to 1, of gas-phase arsenic on meteoric
+smoke particles (carma=arsenic_msp).
+Default: 1.0
+</entry>
+
+<entry id="carma_as_do_uptake" type="logical" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+If TRUE, gas-phase arsenic (ASGAS) is taken up onto meteoric smoke and
+carried as the core-mass element DUSTAS (carma=arsenic_msp).
+Default: TRUE
+</entry>
+
+<entry id="carma_as_do_fuchs" type="logical" category="carma_model"
+       group="carma_model_nl" valid_values="" >
+If TRUE, apply the Fuchs-Sutugin transition-regime correction to the
+arsenic uptake rate; if FALSE, use the free-molecular (kinetic) rate
+(carma=arsenic_msp).
+Default: TRUE
 </entry>
 
 <entry id="carma_escale_file" type="char*256" input_pathname="abs" category="carma_model"
