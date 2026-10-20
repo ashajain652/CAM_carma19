@@ -1,0 +1,46 @@
+--- base/newstate_calc.F90
++++ models/arsenic_msp/newstate_calc.F90
+@@ -1,3 +1,14 @@
++!++AS
++! OVERRIDE of CARMA base/newstate_calc.F90 (SVN carma3_49_rel, r91872), for the CAM
++! arsenic_msp model (CAM cam_cesm2_1_rel_60). This copy is found before base/ because
++! the model directory comes first in the build Filepath (bld/configure).
++! Changes are bracketed by !++AS / !--AS:
++!   1) use arsenic_uptake_mod
++!   2) call arsenic_uptake for every level once per newstate_calc call, right after
++!      microslow (coagulation) and outside the do_grow block, so that it runs every
++!      CARMA step even though growth (microfast) is off.
++! See README.md and newstate_calc.F90.patch in this directory.
++!--AS
+ ! Include shortname defintions, so that the F77 code does not have to be modified to
+ ! reference the CARMA structure.
+ #include "carma_globaer.h"
+@@ -23,6 +34,9 @@
+   use carma_types_mod
+   use carmastate_mod
+   use carma_mod
++!++AS
++  use arsenic_uptake_mod, only: as_do_uptake, arsenic_uptake
++!--AS
+ 
+   implicit none
+ 
+@@ -65,6 +79,18 @@
+     call microslow(carma, cstate, rc)
+     if (rc < RC_OK) return
+   endif
++
++!++AS
++  ! Uptake of the arsenic gas onto smoke (arsenic_msp). Runs once per call regardless
++  ! of do_grow. newstate_calc is called once per step unless do_incloud is set, which
++  ! arsenic_msp refuses.
++  if (as_do_uptake) then
++    do iz = 1, NZ
++      call arsenic_uptake(carma, cstate, iz, rc)
++      if (rc < RC_OK) return
++    end do
++  end if
++!--AS
+   
+   ! If there is any microsphysics that happens on a faster time scale,
+   ! then check to see if the time step needs to be subdivided and then

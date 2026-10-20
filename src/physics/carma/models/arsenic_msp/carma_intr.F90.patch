@@ -1,0 +1,130 @@
+--- cam/carma_intr.F90
++++ models/arsenic_msp/carma_intr.F90
+@@ -1,3 +1,16 @@
++!++AS
++! OVERRIDE of CAM src/physics/carma/cam/carma_intr.F90 (CAM cam_cesm2_1_rel_60), for
++! the CARMA arsenic_msp model. This copy is found before cam/ because the model
++! directory comes first in the build Filepath (bld/configure). Changes are bracketed
++! by !++AS / !--AS:
++!   1) carma_register: add the CARMA gas as a CAM constituent if it does not exist
++!      (cnst_get_ind with abort=.false., then cnst_add); remember which gases were
++!      added here (carma_added_gas).
++!   2) carma_init: history fields <gas> (only for gases added in 1) and <gas>EM.
++!   3) carma_emission_tend: gas emission from CARMA_EmitGas (carma_model_mod).
++!   4) carma_init_cnst: initialize gas constituents to 0 where mask is true.
++! See README.md and carma_intr.F90.patch in this directory.
++!--AS
+ !! This module is a coupler between the CAM model and the Community Aerosol
+ !! and Radiation Model for Atmospheres (CARMA) microphysics model. It adds the
+ !! capabilities of CARMA to CAM, allowing for binned microphysics studies
+@@ -115,6 +128,9 @@
+   ! Constituent Mappings      
+   integer                        :: icnst4elem(NELEM, NBIN)       ! constituent index for a carma element
+   integer                        :: icnst4gas(NGAS)               ! constituent index for a carma gas
++!++AS
++  logical                        :: carma_added_gas(NGAS) = .false. ! gas constituent was added by CARMA
++!--AS
+ 
+   character(len=16)              :: btndname(NGROUP, NBIN)        ! names of group per bin tendencies
+   character(len=16)              :: etndname(NELEM, NBIN)         ! names of element tendencies
+@@ -392,7 +408,16 @@
+       if (rc < 0) call endrun('carma_register::CARMAGAS_Get failed.')
+         
+       ! Is the gas already defined?
+-      call cnst_get_ind(shortname, icnst4gas(igas))
++!++AS
++      ! The original called cnst_get_ind without abort=.false., which ends the run if
++      ! the gas is not already a CAM constituent. Add it as a CAM constituent instead.
++      call cnst_get_ind(shortname, icnst4gas(igas), abort=.false.)
++      if (icnst4gas(igas) <= 0) then
++        call cnst_add(shortname, wtmol, cpair, 0._r8, icnst4gas(igas), &
++          longname=name, mixtype=carma_mixtype)
++        carma_added_gas(igas) = .true.
++      end if
++!--AS
+   
+       ! For substepping, we need to store the last mmr values for the gas.
+       call pbuf_add_field('CG' // shortname, 'global',dtype_r8, (/pcols, pver/), ipbuf4gas(igas))
+@@ -663,6 +688,19 @@
+       gtndname(igas) = trim(cnst_name(icnst)) // 'TC'
+ 
+       call addfld(gtndname(igas), (/ 'lev' /), 'A',     'kg/kg/s', trim(cnst_name(icnst)) // ' CARMA tendency')
++!++AS
++      ! Constituent history field, only for gases that CARMA added (another package
++      ! owns the addfld for a pre-existing constituent).
++      if (carma_added_gas(igas)) then
++        call addfld(cnst_name(icnst), (/ 'lev' /), 'A', 'kg/kg', cnst_longname(icnst))
++        if (history_carma) then
++           call add_default(cnst_name(icnst), 1, ' ')
++        end if
++      end if
++
++      call addfld(trim(cnst_name(icnst))//'EM', (/ 'lev' /), 'A', 'kg/kg/s', &
++           trim(cnst_name(icnst)) // ' emission')
++!--AS
+ 
+       call addfld(trim(cnst_name(icnst))//'SI', (/ 'lev' /), 'A', 'ratio',   &
+            trim(cnst_name(icnst)) // ' saturation wrt ice')
+@@ -1704,6 +1742,9 @@
+     integer                      :: rc                 ! CARMA return code
+     integer                      :: cnsttype           ! constituent type
+     integer                      :: maxbin             ! last prognostic bin
++!++AS
++    integer                      :: igas               ! gas index
++!--AS
+ 
+     ! Initialize the return code.
+     rc = 0
+@@ -1745,6 +1786,22 @@
+     
+     ! NOTE: There is currently no initialization for gases, but it could be
+     ! added here.
++!++AS
++    ! Initialize gases to 0, so q (intent(out)) is defined for them.
++    do igas = 1, NGAS
++      icnst = icnst4gas(igas)
++
++      if (icnst > 0) then
++        if (cnst_name(icnst) == name) then
++          do ilev = 1, size(q, 2)
++            where(mask)
++              q(:, ilev) = 0.0_r8
++            end where
++          end do
++        end if
++      end if
++    end do
++!--AS
+     
+     return
+   end subroutine carma_init_cnst
+@@ -1906,6 +1963,9 @@
+     integer      :: ielem                   ! element index
+     integer      :: ibin                    ! bin index
+     integer      :: icnst                   ! consituent index
++!++AS
++    integer      :: igas                    ! gas index
++!--AS
+     real(r8)     :: tendency(pcols, pver)   ! constituent tendency (kg/kg/s)
+     real(r8)     :: surfaceFlux(pcols)      ! constituent surface flux (kg/m^2/s)
+     integer      :: cnsttype                ! constituent type
+@@ -1960,7 +2020,19 @@
+     enddo
+     
+     ! No emissions rate is set up for gases, but it could be added here.
++!++AS
++    ! Emissions of gases into the atmosphere (CARMA_EmitGas in carma_model_mod).
++    do igas = 1, NGAS
++      icnst = icnst4gas(igas)
+ 
++      call CARMA_EmitGas(carma, igas, icnst, dt, state, cam_in, tendency, rc)
++      if (rc < 0) call endrun('carma_emission_tend::CARMA_EmitGas failed.')
++
++      ptend%q(:ncol, :pver, icnst) = tendency(:ncol, :pver)
++      call outfld(trim(cnst_name(icnst))//'EM', ptend%q(:ncol, :, icnst), ncol, lchnk)
++    end do
++!--AS
++
+     return
+   end subroutine carma_emission_tend 
+ 
