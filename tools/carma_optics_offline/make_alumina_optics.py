@@ -20,7 +20,7 @@ build.sh; see carma_optics_driver.F90), and writes one
 
 Usage:
   make_alumina_optics.py alumina_d250um [...] [--mie bohren|toon] [--outdir DIR]
-  make_alumina_optics.py --all-sizes            # the 10 alumina_d<D>um models
+  make_alumina_optics.py --all-sizes            # the 15 alumina_d<D>um models
 
 Default outdir: $DIN_LOC_ROOT/atm/cam/physprops/alumina, which is where
 build-namelist looks for the alumina_d<D>um files (DIN_LOC_ROOT defaults to
@@ -43,7 +43,7 @@ HERE = Path(__file__).resolve().parent
 # This directory is components/cam/tools/carma_optics_offline in a CESM checkout.
 MODELS = HERE.parents[1] / "src/physics/carma/models"
 DIN = Path(os.environ.get("DIN_LOC_ROOT", Path.home() / "MIT/cesm2_port/inputdata"))
-SIZES = [2, 6, 10, 14, 18, 50, 100, 150, 200, 250]
+SIZES = ["0p01", "0p1", 2, 6, 10, 14, 18, 25, 35, 45, 50, 100, 150, 200, 250]
 NLW, NSW = 16, 14
 SHORTNAME = "CRALUM"
 FNUM = r"([0-9.eEdD+-]+)_f"
@@ -206,7 +206,7 @@ def write_files(model, p, o, mie, outdir):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("models", nargs="*")
-    ap.add_argument("--all-sizes", action="store_true", help="the 10 alumina_d<D>um models")
+    ap.add_argument("--all-sizes", action="store_true", help="the 15 alumina_d<D>um models")
     ap.add_argument("--mie", choices=["bohren", "toon"], default="bohren")
     ap.add_argument("--outdir", type=Path, default=DIN / "atm/cam/physprops/alumina")
     args = ap.parse_args()

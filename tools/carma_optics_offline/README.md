@@ -35,7 +35,7 @@ Files are made with CARMA's `bhmie` (Bohren & Huffman), with one fix in `bhmie_p
 
 ```
 ./build.sh
-./make_alumina_optics.py --all-sizes            # the 10 alumina_d<D>um models
+./make_alumina_optics.py --all-sizes            # the 15 alumina_d<D>um models
 ./make_alumina_optics.py alumina_d50um --outdir /path/to/inputdata/atm/cam/physprops/alumina
 ```
 
