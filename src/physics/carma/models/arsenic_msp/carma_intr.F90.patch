@@ -1,6 +1,6 @@
 --- cam/carma_intr.F90
 +++ models/arsenic_msp/carma_intr.F90
-@@ -1,3 +1,16 @@
+@@ -1,3 +1,18 @@
 +!++AS
 +! OVERRIDE of CAM src/physics/carma/cam/carma_intr.F90 (CAM cam_cesm2_1_rel_60), for
 +! the CARMA arsenic_msp model. This copy is found before cam/ because the model
@@ -12,12 +12,24 @@
 +!   2) carma_init: history fields <gas> (only for gases added in 1) and <gas>EM.
 +!   3) carma_emission_tend: gas emission from CARMA_EmitGas (carma_model_mod).
 +!   4) carma_init_cnst: initialize gas constituents to 0 where mask is true.
++!   5) carma_init / carma_timestep_tend: history field ASGASK, the arsenic gas
++!      uptake loss rate k [1/s] used by arsenic_uptake_mod at each level.
 +! See README.md and carma_intr.F90.patch in this directory.
 +!--AS
  !! This module is a coupler between the CAM model and the Community Aerosol
  !! and Radiation Model for Atmospheres (CARMA) microphysics model. It adds the
  !! capabilities of CARMA to CAM, allowing for binned microphysics studies
-@@ -115,6 +128,9 @@
+@@ -21,6 +36,9 @@
+   use carmasolute_mod
+   use carmastate_mod
+   use carma_mod
++!++AS
++  use arsenic_uptake_mod, only: arsenic_uptake_reset, arsenic_uptake_getk
++!--AS
+   
+   use shr_kind_mod,   only: r8 => shr_kind_r8
+   use spmd_utils,     only: masterproc
+@@ -115,6 +133,9 @@
    ! Constituent Mappings      
    integer                        :: icnst4elem(NELEM, NBIN)       ! constituent index for a carma element
    integer                        :: icnst4gas(NGAS)               ! constituent index for a carma gas
@@ -27,7 +39,7 @@
  
    character(len=16)              :: btndname(NGROUP, NBIN)        ! names of group per bin tendencies
    character(len=16)              :: etndname(NELEM, NBIN)         ! names of element tendencies
-@@ -392,7 +408,16 @@
+@@ -392,7 +413,16 @@
        if (rc < 0) call endrun('carma_register::CARMAGAS_Get failed.')
          
        ! Is the gas already defined?
@@ -45,7 +57,7 @@
    
        ! For substepping, we need to store the last mmr values for the gas.
        call pbuf_add_field('CG' // shortname, 'global',dtype_r8, (/pcols, pver/), ipbuf4gas(igas))
-@@ -663,6 +688,19 @@
+@@ -663,7 +693,20 @@
        gtndname(igas) = trim(cnst_name(icnst)) // 'TC'
  
        call addfld(gtndname(igas), (/ 'lev' /), 'A',     'kg/kg/s', trim(cnst_name(icnst)) // ' CARMA tendency')
@@ -58,14 +70,96 @@
 +           call add_default(cnst_name(icnst), 1, ' ')
 +        end if
 +      end if
-+
+ 
 +      call addfld(trim(cnst_name(icnst))//'EM', (/ 'lev' /), 'A', 'kg/kg/s', &
 +           trim(cnst_name(icnst)) // ' emission')
 +!--AS
- 
++
        call addfld(trim(cnst_name(icnst))//'SI', (/ 'lev' /), 'A', 'ratio',   &
             trim(cnst_name(icnst)) // ' saturation wrt ice')
-@@ -1704,6 +1742,9 @@
+       call addfld(trim(cnst_name(icnst))//'SL', (/ 'lev' /), 'A', 'ratio',   &
+@@ -680,6 +723,13 @@
+          call add_default(trim(cnst_name(icnst))//'SL', 1, ' ')
+       end if
+     end do
++
++!++AS
++    ! Loss rate k of the arsenic gas used by arsenic_uptake (arsenic_uptake_mod),
++    ! level by level. Always registered and written; it is 0 where no uptake rate
++    ! was computed, including everywhere when carma_as_do_uptake is false.
++    call addfld('ASGASK', (/ 'lev' /), 'A', '1/s', 'Arsenic gas uptake loss rate onto smoke')
++!--AS
+     
+     if (carma_do_thermo) then
+        call addfld('CRTT', (/ 'lev' /), 'A',     'K/s', ' CARMA temperature tendency')
+@@ -908,6 +958,9 @@
+     use camsrfexch,       only: cam_in_t, cam_out_t
+     use scamMod,          only: single_column
+     use planck,           only: planckIntensity
++!++AS
++    use cam_history,      only: outfld
++!--AS
+     
+     implicit none
+ 
+@@ -1012,6 +1065,9 @@
+     real(r8)              :: radint(pver,NWAVE)                     ! radiative intensity (W/m2/sr/cm)
+     real(kind=f)          :: dwave(NWAVE)                           ! the wavelengths widths (cm)
+     real(kind=f)          :: wave(NWAVE)                            ! the center wavelengths (cm)
++!++AS
++    real(r8)              :: asgask(pcols, pver)                    ! arsenic gas uptake loss rate (1/s)
++!--AS
+ 
+     integer               :: max_nsubstep
+     real(kind=f)          :: max_nretry
+@@ -1138,6 +1194,10 @@
+       if (rc < 0) call endrun('carma_timestep_tend::CARMASTATE_CreateFromReference failed.')
+     end if
+ 
++
++!++AS
++    asgask(:, :) = 0.0_r8
++!--AS
+ 
+     ! Process each column.
+     do icol = 1, state_loc%ncol
+@@ -1365,12 +1425,25 @@
+       end if
+     
+     
++!++AS
++      ! Clear the uptake k diagnostic for this column (no value from the previous
++      ! column can leak through).
++      call arsenic_uptake_reset(pver)
++!--AS
++
+       ! Advance the microphysics one timestep.
+       call CARMASTATE_Step(cstate, rc, cldfrc=cldfrc, rhcrit=rhcrit, &
+            lndfv=lndfv, ocnfv=ocnfv, icefv=icefv, lndram=lndram, &
+            ocnram=ocnram, iceram=iceram, lndfrac=cam_in%landfrac(icol), &
+            ocnfrac=cam_in%ocnfrac(icol), icefrac=cam_in%icefrac(icol))
+       if (rc < 0) call endrun('carma_timestep_tend::CARMA_Step failed.') 
++
++!++AS
++      ! The k used at each CARMA level iz. CARMASTATE_Create got this column as
++      ! pmid(icol, 1:pver) with no reordering, and the tendencies come back as
++      ! newstate(1:pver) -> ptend%q(icol, 1:pver, :), so CARMA iz is CAM level k.
++      call arsenic_uptake_getk(pver, asgask(icol, :))
++!--AS
+             
+ 
+       ! Get the results for the CARMA particles.
+@@ -1590,6 +1663,9 @@
+      
+     ! Output diagnostic fields.
+     call carma_output_diagnostics(state_loc, ptend, gpdiags, sbdiags, gsdiags, spdiags, bndiags)
++!++AS
++    call outfld('ASGASK', asgask, pcols, lchnk)
++!--AS
+ 
+   end subroutine carma_timestep_tend
+   
+@@ -1704,6 +1780,9 @@
      integer                      :: rc                 ! CARMA return code
      integer                      :: cnsttype           ! constituent type
      integer                      :: maxbin             ! last prognostic bin
@@ -75,7 +169,7 @@
  
      ! Initialize the return code.
      rc = 0
-@@ -1745,6 +1786,22 @@
+@@ -1745,6 +1824,22 @@
      
      ! NOTE: There is currently no initialization for gases, but it could be
      ! added here.
@@ -98,7 +192,7 @@
      
      return
    end subroutine carma_init_cnst
-@@ -1906,6 +1963,9 @@
+@@ -1906,6 +2001,9 @@
      integer      :: ielem                   ! element index
      integer      :: ibin                    ! bin index
      integer      :: icnst                   ! consituent index
@@ -108,7 +202,7 @@
      real(r8)     :: tendency(pcols, pver)   ! constituent tendency (kg/kg/s)
      real(r8)     :: surfaceFlux(pcols)      ! constituent surface flux (kg/m^2/s)
      integer      :: cnsttype                ! constituent type
-@@ -1960,7 +2020,19 @@
+@@ -1960,7 +2058,19 @@
      enddo
      
      ! No emissions rate is set up for gases, but it could be added here.

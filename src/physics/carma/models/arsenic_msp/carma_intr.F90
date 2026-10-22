@@ -9,6 +9,8 @@
 !   2) carma_init: history fields <gas> (only for gases added in 1) and <gas>EM.
 !   3) carma_emission_tend: gas emission from CARMA_EmitGas (carma_model_mod).
 !   4) carma_init_cnst: initialize gas constituents to 0 where mask is true.
+!   5) carma_init / carma_timestep_tend: history field ASGASK, the arsenic gas
+!      uptake loss rate k [1/s] used by arsenic_uptake_mod at each level.
 ! See README.md and carma_intr.F90.patch in this directory.
 !--AS
 !! This module is a coupler between the CAM model and the Community Aerosol
@@ -34,6 +36,9 @@ module carma_intr
   use carmasolute_mod
   use carmastate_mod
   use carma_mod
+!++AS
+  use arsenic_uptake_mod, only: arsenic_uptake_reset, arsenic_uptake_getk
+!--AS
   
   use shr_kind_mod,   only: r8 => shr_kind_r8
   use spmd_utils,     only: masterproc
@@ -718,6 +723,13 @@ contains
          call add_default(trim(cnst_name(icnst))//'SL', 1, ' ')
       end if
     end do
+
+!++AS
+    ! Loss rate k of the arsenic gas used by arsenic_uptake (arsenic_uptake_mod),
+    ! level by level. Always registered and written; it is 0 where no uptake rate
+    ! was computed, including everywhere when carma_as_do_uptake is false.
+    call addfld('ASGASK', (/ 'lev' /), 'A', '1/s', 'Arsenic gas uptake loss rate onto smoke')
+!--AS
     
     if (carma_do_thermo) then
        call addfld('CRTT', (/ 'lev' /), 'A',     'K/s', ' CARMA temperature tendency')
@@ -946,6 +958,9 @@ contains
     use camsrfexch,       only: cam_in_t, cam_out_t
     use scamMod,          only: single_column
     use planck,           only: planckIntensity
+!++AS
+    use cam_history,      only: outfld
+!--AS
     
     implicit none
 
@@ -1050,6 +1065,9 @@ contains
     real(r8)              :: radint(pver,NWAVE)                     ! radiative intensity (W/m2/sr/cm)
     real(kind=f)          :: dwave(NWAVE)                           ! the wavelengths widths (cm)
     real(kind=f)          :: wave(NWAVE)                            ! the center wavelengths (cm)
+!++AS
+    real(r8)              :: asgask(pcols, pver)                    ! arsenic gas uptake loss rate (1/s)
+!--AS
 
     integer               :: max_nsubstep
     real(kind=f)          :: max_nretry
@@ -1176,6 +1194,10 @@ contains
       if (rc < 0) call endrun('carma_timestep_tend::CARMASTATE_CreateFromReference failed.')
     end if
 
+
+!++AS
+    asgask(:, :) = 0.0_r8
+!--AS
 
     ! Process each column.
     do icol = 1, state_loc%ncol
@@ -1403,12 +1425,25 @@ contains
       end if
     
     
+!++AS
+      ! Clear the uptake k diagnostic for this column (no value from the previous
+      ! column can leak through).
+      call arsenic_uptake_reset(pver)
+!--AS
+
       ! Advance the microphysics one timestep.
       call CARMASTATE_Step(cstate, rc, cldfrc=cldfrc, rhcrit=rhcrit, &
            lndfv=lndfv, ocnfv=ocnfv, icefv=icefv, lndram=lndram, &
            ocnram=ocnram, iceram=iceram, lndfrac=cam_in%landfrac(icol), &
            ocnfrac=cam_in%ocnfrac(icol), icefrac=cam_in%icefrac(icol))
       if (rc < 0) call endrun('carma_timestep_tend::CARMA_Step failed.') 
+
+!++AS
+      ! The k used at each CARMA level iz. CARMASTATE_Create got this column as
+      ! pmid(icol, 1:pver) with no reordering, and the tendencies come back as
+      ! newstate(1:pver) -> ptend%q(icol, 1:pver, :), so CARMA iz is CAM level k.
+      call arsenic_uptake_getk(pver, asgask(icol, :))
+!--AS
             
 
       ! Get the results for the CARMA particles.
@@ -1628,6 +1663,9 @@ contains
      
     ! Output diagnostic fields.
     call carma_output_diagnostics(state_loc, ptend, gpdiags, sbdiags, gsdiags, spdiags, bndiags)
+!++AS
+    call outfld('ASGASK', asgask, pcols, lchnk)
+!--AS
 
   end subroutine carma_timestep_tend
   

@@ -71,8 +71,27 @@ a header naming the original.
   4. `carma_init_cnst`: if `name` is a gas constituent, set `q = 0` where `mask` is
      true. The original only handled elements, so `q` (`intent(out)`) was left
      undefined for gases.
+  5. `carma_init` and `carma_timestep_tend`: history field `ASGASK` (1/s, `lev`,
+     averaging flag 'A'), the arsenic gas loss rate `k` that `arsenic_uptake` used at
+     each level (added 2026-10-21, user-approved). `carma_init` registers it after
+     the gas loop. In `carma_timestep_tend`, `arsenic_uptake_reset(pver)` clears the
+     module array before each column's `CARMASTATE_Step`, `arsenic_uptake_getk`
+     copies it into a local `asgask(pcols,pver)` right after the step, and
+     `outfld('ASGASK', ...)` writes the chunk after the column loop. Level mapping:
+     the column is passed to `CARMASTATE_Create` as `pmid(icol,1:pver)` (CAM order,
+     k = 1 at the top) and CARMA keeps that order for `I_HYBRID`; the interface maps
+     results back with `ptend%q(icol,1:pver,:) = newstate(1:pver)`. So CARMA `iz`
+     is CAM `k` and no flip is needed. Every column `1..ncol` goes through
+     `CARMASTATE_Step` (none is skipped), so every written value is the column's own
+     `k`. `ASGASK` is always registered and written; it is 0 where no rate was
+     computed (`as_gamma <= 0` or `gc <= 0` at that level), and everywhere when
+     `carma_as_do_uptake = .false.`. Where `k*dtime < 1e-30` the computed `k` is
+     written although nothing is moved. No fill value is used.
 - **Why:** the stock interface assumes CARMA gases (H2O, H2SO4) already exist as CAM
   constituents and have no CARMA emission. `ASGAS` is new and emitted by CARMA.
+  `ASGASK` gives the exact `k` for WP7 test 2; an offline recomputation from the
+  `:I` snapshot cannot see the state the uptake sees (see
+  `Postprocessing/arsenic/README.md`).
 
 ## Uptake physics (`arsenic_uptake_mod.F90`)
 
@@ -87,6 +106,13 @@ For each level, in cgs:
 - `dgc = gc (1 - exp(-k dtime))` is moved from `gc` to `pc(:,:,iecore)` in
   proportion to `k_i / k`. A series is used for `1 - exp(-x)` when `x < 1e-4`.
 - Returns early if `gamma <= 0`, `gc <= 0` or `k dtime < 1e-30`.
+- Diagnostic: the `k` used at each level is stored in the module array `as_kused`
+  (`!$OMP THREADPRIVATE`, since CAM may run chunks on several threads). Each call
+  first sets `as_kused(iz) = 0` and then, once the sum over bins is done, `ksum`
+  (also when `k dtime < 1e-30`). `arsenic_uptake_reset(nz)` (zero, allocate if
+  needed) and `arsenic_uptake_getk(nz, k)` are called from the `carma_intr.F90`
+  override; it becomes history field `ASGASK`. The diagnostic does not change
+  any prognostic value.
 
 `gc` and a core-mass `pc` are both mass mixing ratio times `rhoa_wet`
 (`CARMASTATE_SetGas`/`GetGas`, `CARMASTATE_SetBin`/`GetBin` in

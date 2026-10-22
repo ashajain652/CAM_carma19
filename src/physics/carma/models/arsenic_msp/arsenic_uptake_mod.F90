@@ -36,6 +36,13 @@
 !! carma_model_mod (arsenic_msp). The routine is called once per level per CARMA step
 !! from the newstate_calc.F90 override in this model directory.
 !!
+!! Diagnostic: the total loss rate k used at each level is kept in as_kused(iz) [1/s]
+!! (0 where no rate was computed: as_gamma <= 0 or gc <= 0; the computed k is kept
+!! even where k*dtime < KDT_MIN and nothing is moved). The CAM interface clears it
+!! with arsenic_uptake_reset before each column and reads it with
+!! arsenic_uptake_getk after CARMASTATE_Step; it is history field ASGASK. The
+!! array is THREADPRIVATE because CAM may run chunks on several OpenMP threads.
+!!
 !! @author  Asha Jain (with Claude)
 !! @version Oct-2026
 module arsenic_uptake_mod
@@ -59,9 +66,49 @@ module arsenic_uptake_mod
   integer,      public :: as_igroup    = 0         !! CARMA group index of the smoke
   integer,      public :: as_iecore    = 0         !! CARMA element index of the arsenic core
 
+  ! Diagnostic: total loss rate k used at each level in the current column [1/s].
+  real(kind=f), allocatable, public :: as_kused(:)
+  !$OMP THREADPRIVATE(as_kused)
+
   public :: arsenic_uptake
+  public :: arsenic_uptake_reset
+  public :: arsenic_uptake_getk
 
 contains
+
+  !! Clear the k diagnostic (as_kused) for a new column of nz levels, allocating it
+  !! if needed. Called by the CAM interface before CARMASTATE_Step for each column,
+  !! so that no value from a previous column can be read back.
+  subroutine arsenic_uptake_reset(nz)
+
+    integer, intent(in) :: nz   !! number of levels in the column
+
+    if (allocated(as_kused)) then
+      if (size(as_kused) /= nz) deallocate(as_kused)
+    end if
+    if (.not. allocated(as_kused)) allocate(as_kused(nz))
+
+    as_kused(:) = 0._f
+
+    return
+  end subroutine arsenic_uptake_reset
+
+
+  !! Return the k diagnostic (as_kused) for the current column. Returns zeros if
+  !! arsenic_uptake_reset has not been called on this thread or the sizes differ.
+  subroutine arsenic_uptake_getk(nz, kused)
+
+    integer, intent(in)       :: nz          !! number of levels in the column
+    real(kind=f), intent(out) :: kused(nz)   !! total loss rate used at each level [1/s]
+
+    kused(:) = 0._f
+    if (allocated(as_kused)) then
+      if (size(as_kused) == nz) kused(:) = as_kused(:)
+    end if
+
+    return
+  end subroutine arsenic_uptake_getk
+
 
   !! Move arsenic from the gas (gc) to the arsenic core-mass element (pc) at level iz
   !! with an exact first-order exponential update over dtime.
@@ -102,6 +149,18 @@ contains
     real(kind=f)            :: dgc             ! gas moved to particles [scaled g/cm3]
     integer                 :: ibin            ! bin index
     integer                 :: iencn           ! number concentration element of the group
+
+    ! Clear the k diagnostic for this level first, so that every return path below
+    ! leaves 0 unless a rate is computed. Allocate it if the interface did not.
+    if (.not. allocated(as_kused)) then
+      allocate(as_kused(NZ))
+      as_kused(:) = 0._f
+    else if (size(as_kused) /= NZ) then
+      deallocate(as_kused)
+      allocate(as_kused(NZ))
+      as_kused(:) = 0._f
+    end if
+    as_kused(iz) = 0._f
 
     ! Check the configuration. These are cheap integer tests, and any failure is fatal.
     if ((as_igas < 1) .or. (as_igas > NGAS) .or. &
@@ -165,6 +224,9 @@ contains
 
       ksum = ksum + kbinrate(ibin)
     end do
+
+    ! Record the rate for the diagnostic, also when it is too small to act on.
+    as_kused(iz) = ksum
 
     xkdt = ksum * dtime
     if (xkdt < KDT_MIN) return
