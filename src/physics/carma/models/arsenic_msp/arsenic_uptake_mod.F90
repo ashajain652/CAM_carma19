@@ -32,6 +32,21 @@
 !! metric factors (CARMASTATE_SetGas/GetGas and CARMASTATE_SetBin/GetBin), so moving
 !! mass between them needs no unit conversion and conserves mass to round-off.
 !!
+!! Bin shift (as_do_binshift = .true.): the arsenic taken up adds to the particle
+!! mass. CARMA gives every particle in bin i the mass rmass[i], so after the uptake
+!! a particle of bin i has the mass
+!!   m     = rmass[i] + dA_i / N_i        (dA_i = arsenic added to bin i, N_i = pc of
+!!                                        the number element; the scaling cancels)
+!! With j the largest bin that has rmass[j] <= m, a fraction
+!!   fmove = (m - rmass[j]) / (rmass[j+1] - rmass[j])
+!! of the particles goes to bin j+1 and the rest to bin j, and the arsenic core of
+!! bin i (old core plus dA_i) is split with the same fractions. This conserves number,
+!! total particle mass (N * rmass) and arsenic mass to round-off. DUSTnn is then smoke
+!! plus arsenic, and the smoke mass is DUSTnn - DUSTASnn. Particles that would grow
+!! past the largest bin stay in bin NBIN, which loses the mass above rmass[NBIN]; bin
+!! NBIN has a radius of about 0.1 um and holds almost no smoke. With
+!! as_do_binshift = .false. arsenic is a passive core label (the v1 behaviour).
+!!
 !! The module variables are set once per MPI task by CARMA_InitializeModel in
 !! carma_model_mod (arsenic_msp). The routine is called once per level per CARMA step
 !! from the newstate_calc.F90 override in this model directory.
@@ -61,6 +76,7 @@ module arsenic_uptake_mod
   ! Configuration, set by CARMA_InitializeModel (carma_model_mod) on every task.
   logical,      public :: as_do_uptake = .false.   !! turn the uptake on or off
   logical,      public :: as_do_fuchs  = .true.    !! apply the Fuchs-Sutugin correction
+  logical,      public :: as_do_binshift = .true.  !! add the arsenic to the particle mass (bin shift)
   real(kind=f), public :: as_gamma     = 1._f      !! uptake (sticking) coefficient, 0-1
   integer,      public :: as_igas      = 0         !! CARMA gas index of the arsenic gas
   integer,      public :: as_igroup    = 0         !! CARMA group index of the smoke
@@ -111,10 +127,11 @@ contains
 
 
   !! Move arsenic from the gas (gc) to the arsenic core-mass element (pc) at level iz
-  !! with an exact first-order exponential update over dtime.
+  !! with an exact first-order exponential update over dtime. With as_do_binshift,
+  !! then move the particles to the bins that match their new mass.
   !!
-  !! NOTE: Do not put an apostrophe in comments in this file, because it is passed
-  !! through the C preprocessor.
+  !! NOTE: Do not put an apostrophe, or a CARMA macro name followed by a parenthesis,
+  !! in comments in this file, because it is passed through the C preprocessor.
   subroutine arsenic_uptake(carma, cstate, iz, rc)
 
     type(carma_type), intent(in)         :: carma   !! the carma object
@@ -147,7 +164,13 @@ contains
     real(kind=f)            :: xkdt            ! ksum * dtime
     real(kind=f)            :: frac            ! 1 - exp(-xkdt)
     real(kind=f)            :: dgc             ! gas moved to particles [scaled g/cm3]
+    real(kind=f)            :: dabin(NBIN)     ! arsenic added to each bin [scaled g/cm3]
+    real(kind=f)            :: pcnum(NBIN)     ! number element after the bin shift
+    real(kind=f)            :: pccore(NBIN)    ! arsenic core element after the bin shift
+    real(kind=f)            :: mnew            ! particle mass after the uptake [g]
+    real(kind=f)            :: fmove           ! fraction of the particles moved to bin jbin+1
     integer                 :: ibin            ! bin index
+    integer                 :: jbin            ! bin that the particles of ibin move to
     integer                 :: iencn           ! number concentration element of the group
 
     ! Clear the k diagnostic for this level first, so that every return path below
@@ -243,10 +266,59 @@ contains
     gc(iz, as_igas) = gc(iz, as_igas) - dgc
 
     do ibin = 1, NBIN
+      dabin(ibin) = 0._f
       if (kbinrate(ibin) > 0._f) then
-        pc(iz, ibin, as_iecore) = pc(iz, ibin, as_iecore) + dgc * (kbinrate(ibin) / ksum)
+        dabin(ibin) = dgc * (kbinrate(ibin) / ksum)
+        pc(iz, ibin, as_iecore) = pc(iz, ibin, as_iecore) + dabin(ibin)
       end if
     end do
+
+    if (.not. as_do_binshift) return
+
+    ! Move the particles of each bin, with their arsenic, to the bins that match their
+    ! new mass. All bins are moved from the state before the shift.
+    pcnum(:)  = 0._f
+    pccore(:) = 0._f
+
+    do ibin = 1, NBIN
+      if (dabin(ibin) <= 0._f) then
+        pcnum(ibin)  = pcnum(ibin)  + pc(iz, ibin, iencn)
+        pccore(ibin) = pccore(ibin) + pc(iz, ibin, as_iecore)
+        cycle
+      end if
+
+      ! kbinrate > 0 here, so the number is > 0.
+      mnew = rmass(ibin, as_igroup) + dabin(ibin) / pc(iz, ibin, iencn)
+
+      jbin = ibin
+      do while (jbin < NBIN)
+        if (rmass(jbin+1, as_igroup) > mnew) exit
+        jbin = jbin + 1
+      end do
+
+      if (jbin == NBIN) then
+        fmove = 0._f
+      else if (jbin == ibin) then
+        ! The usual case. Use the added mass directly, because mnew - rmass[ibin] would
+        ! cancel when the added mass is very small.
+        fmove = (dabin(ibin) / pc(iz, ibin, iencn)) / &
+                (rmass(ibin+1, as_igroup) - rmass(ibin, as_igroup))
+      else
+        fmove = (mnew - rmass(jbin, as_igroup)) / &
+                (rmass(jbin+1, as_igroup) - rmass(jbin, as_igroup))
+      end if
+
+      pcnum(jbin)  = pcnum(jbin)  + (1._f - fmove) * pc(iz, ibin, iencn)
+      pccore(jbin) = pccore(jbin) + (1._f - fmove) * pc(iz, ibin, as_iecore)
+
+      if (fmove > 0._f) then
+        pcnum(jbin+1)  = pcnum(jbin+1)  + fmove * pc(iz, ibin, iencn)
+        pccore(jbin+1) = pccore(jbin+1) + fmove * pc(iz, ibin, as_iecore)
+      end if
+    end do
+
+    pc(iz, :, iencn)     = pcnum(:)
+    pc(iz, :, as_iecore) = pccore(:)
 
     return
   end subroutine arsenic_uptake

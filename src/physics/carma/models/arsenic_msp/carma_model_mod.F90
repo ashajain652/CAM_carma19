@@ -156,6 +156,7 @@ contains
       if (do_print) write(LUNOPRT,*) '  carma_as_gamma      = ', carma_as_gamma
       if (do_print) write(LUNOPRT,*) '  carma_as_do_uptake  = ', carma_as_do_uptake
       if (do_print) write(LUNOPRT,*) '  carma_as_do_fuchs   = ', carma_as_do_fuchs
+      if (do_print) write(LUNOPRT,*) '  carma_as_do_binshift= ', carma_as_do_binshift
     end if
     
     
@@ -569,7 +570,7 @@ contains
     use physconst,    only: p_rearth=>rearth
     use ppgrid,       only: pverp
     use ref_pres,     only: pref_edge
-    use arsenic_uptake_mod, only: as_do_uptake, as_do_fuchs, as_gamma, as_igas, as_igroup, as_iecore
+    use arsenic_uptake_mod, only: as_do_uptake, as_do_fuchs, as_do_binshift, as_gamma, as_igas, as_igroup, as_iecore
 
     implicit none
 
@@ -745,6 +746,7 @@ contains
     ! done on every task.
     as_do_uptake = carma_as_do_uptake
     as_do_fuchs  = carma_as_do_fuchs
+    as_do_binshift = carma_as_do_binshift
     as_gamma     = carma_as_gamma
     as_igas      = I_GAS_AS
     as_igroup    = I_GRP_DUST
@@ -755,6 +757,7 @@ contains
       if (do_print) write(LUNOPRT,*) 'carma_init(): Arsenic uptake:'
       if (do_print) write(LUNOPRT,*) 'carma_init():   as_do_uptake = ', as_do_uptake
       if (do_print) write(LUNOPRT,*) 'carma_init():   as_do_fuchs  = ', as_do_fuchs
+      if (do_print) write(LUNOPRT,*) 'carma_init():   as_do_binshift = ', as_do_binshift
       if (do_print) write(LUNOPRT,*) 'carma_init():   as_gamma     = ', as_gamma
       if (do_print) write(LUNOPRT,*) 'carma_init():   as_igas      = ', as_igas
       if (do_print) write(LUNOPRT,*) 'carma_init():   as_igroup    = ', as_igroup

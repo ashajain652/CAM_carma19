@@ -119,9 +119,43 @@ For each level, in cgs:
 `base/carmastate_mod.F90`), so the transfer needs no unit conversion and conserves
 mass to round-off.
 
+### Bin shift (`carma_as_do_binshift`, default `.true.`, added 2026-10-22)
+
+The arsenic taken up adds to the particle mass (risk R2 in the plan; the user chose
+this over a passive label on 2026-10-22). CARMA gives every particle in bin `i` the
+mass `rmass(i)` (smoke bins double in volume, `vmrat = 2`). After the uptake, in the
+same call and level:
+
+- `m = rmass(i) + dA_i / N_i`, where `dA_i` is the arsenic just added to bin `i`
+  and `N_i` is the number element (the metric scaling cancels).
+- `j` = the largest bin with `rmass(j) <= m`. A fraction
+  `fmove = (m - rmass(j)) / (rmass(j+1) - rmass(j))` of the particles goes to bin
+  `j+1` and the rest to bin `j`. When `j = i` (the usual case) `fmove` is computed
+  from `dA_i / N_i` directly, to avoid cancellation.
+- The arsenic core of bin `i` (old core plus `dA_i`) is split with the same
+  fractions. All bins are moved from the state before the shift.
+- Number, total particle mass (`N rmass`) and arsenic mass are conserved to
+  round-off. Particles that would grow past bin `NBIN` (radius about 0.1 um) stay
+  there, losing the mass above `rmass(NBIN)`; that bin holds almost no smoke.
+- This is first-order upwind in mass space, so it adds some numerical spreading
+  across bins. Each step moves only a small fraction of a bin.
+
+Consequences:
+
+- `DUSTnn` is smoke **plus** arsenic. Smoke-only mass is `DUSTnn - DUSTASnn`.
+- Core mass can no longer exceed the particle mass because of the uptake, so the base
+  `rhopart.F90` repair branch acts only on advection noise and on the
+  `smallconc` core floor.
+- With `carma_do_fixedinit = .true.` the fall speeds and coagulation kernels stay
+  those of bare smoke for each bin. The shift captures the larger size (mass), not
+  the higher density of arsenic (5.73 vs 2.0 g/cm3). `carma_do_partialinit` would
+  add the density effect on fall speeds (not tested).
+- With `carma_as_do_binshift = .false.` the model is the v1 passive label: `DUSTnn`
+  is smoke only and particles never change bin because of arsenic.
+
 Science notes: `D` uses the kinetic-theory formula CARMA uses for H2SO4; the
 uncertainty this adds is probably small next to the `gamma = 1` assumption. The
-module variables (`as_do_uptake`, `as_do_fuchs`, `as_gamma`, `as_igas`,
+module variables (`as_do_uptake`, `as_do_fuchs`, `as_do_binshift`, `as_gamma`, `as_igas`,
 `as_igroup`, `as_iecore`) are set by `CARMA_InitializeModel`.
 
 Known limitation: CARMA treats a core as part of the bin mass `rmass`, not as

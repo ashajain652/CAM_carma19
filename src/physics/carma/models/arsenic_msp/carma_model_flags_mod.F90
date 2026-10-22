@@ -36,6 +36,7 @@ module carma_model_flags_mod
   real(r8), public               :: carma_as_gamma      = 1.0_r8   ! Arsenic uptake (sticking) coefficient on smoke [0-1]
   logical, public                :: carma_as_do_uptake  = .true.   ! If .true. then do uptake of arsenic gas onto smoke
   logical, public                :: carma_as_do_fuchs   = .true.   ! If .true. then apply the Fuchs-Sutugin correction to the uptake
+  logical, public                :: carma_as_do_binshift = .true.  ! If .true. then the arsenic taken up adds to the particle mass (bin shift)
 
 contains
 
@@ -69,7 +70,8 @@ contains
       carma_as_emis_alt, &
       carma_as_gamma, &
       carma_as_do_uptake, &
-      carma_as_do_fuchs
+      carma_as_do_fuchs, &
+      carma_as_do_binshift
 
     if (masterproc) then
        unitn = getunit()
@@ -93,6 +95,7 @@ contains
     call mpibcast(carma_as_gamma,      1,                      mpir8,   0, mpicom)
     call mpibcast(carma_as_do_uptake,  1,                      mpilog,  0, mpicom)
     call mpibcast(carma_as_do_fuchs,   1,                      mpilog,  0, mpicom)
+    call mpibcast(carma_as_do_binshift, 1,                     mpilog,  0, mpicom)
 #endif
 
   end subroutine carma_model_readnl
