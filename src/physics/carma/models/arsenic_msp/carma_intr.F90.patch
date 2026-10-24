@@ -1,6 +1,6 @@
 --- cam/carma_intr.F90
 +++ models/arsenic_msp/carma_intr.F90
-@@ -1,3 +1,18 @@
+@@ -1,3 +1,20 @@
 +!++AS
 +! OVERRIDE of CAM src/physics/carma/cam/carma_intr.F90 (CAM cam_cesm2_1_rel_60), for
 +! the CARMA arsenic_msp model. This copy is found before cam/ because the model
@@ -14,22 +14,25 @@
 +!   4) carma_init_cnst: initialize gas constituents to 0 where mask is true.
 +!   5) carma_init / carma_timestep_tend: history field ASGASK, the arsenic gas
 +!      uptake loss rate k [1/s] used by arsenic_uptake_mod at each level.
++!   6) carma_register: with carma_as_top_noflux, make the model top a zero-flux
++!      boundary for particle transport, so the DD fields are the surface flux only.
 +! See README.md and carma_intr.F90.patch in this directory.
 +!--AS
  !! This module is a coupler between the CAM model and the Community Aerosol
  !! and Radiation Model for Atmospheres (CARMA) microphysics model. It adds the
  !! capabilities of CARMA to CAM, allowing for binned microphysics studies
-@@ -21,6 +36,9 @@
+@@ -21,6 +38,10 @@
    use carmasolute_mod
    use carmastate_mod
    use carma_mod
 +!++AS
 +  use arsenic_uptake_mod, only: arsenic_uptake_reset, arsenic_uptake_getk
++  use carma_model_flags_mod, only: carma_as_top_noflux
 +!--AS
    
    use shr_kind_mod,   only: r8 => shr_kind_r8
    use spmd_utils,     only: masterproc
-@@ -115,6 +133,9 @@
+@@ -115,6 +136,9 @@
    ! Constituent Mappings      
    integer                        :: icnst4elem(NELEM, NBIN)       ! constituent index for a carma element
    integer                        :: icnst4gas(NGAS)               ! constituent index for a carma gas
@@ -39,7 +42,28 @@
  
    character(len=16)              :: btndname(NGROUP, NBIN)        ! names of group per bin tendencies
    character(len=16)              :: etndname(NELEM, NBIN)         ! names of element tendencies
-@@ -392,7 +413,16 @@
+@@ -337,6 +361,20 @@
+                           gstickl       = carma_gstickl, &
+                           tstick        = carma_tstick)
+     if (rc < 0) call endrun('carma_register::CARMA_Initialize failed.')
++
++!++AS
++    ! CARMA_Initialize sets both boundaries for particle transport to a fixed
++    ! concentration of 0. For I_HYBRID, level 1 is the model top and CARMA's
++    ! "bottom" boundary (ibbnd_pc) is the level-1 interface (vertadv, vertdif), so
++    ! diffusion carries particles out of the model top. vertical.F90 counts any
++    ! column loss as surface deposition (pc_surf, the DD fields). A zero-flux top
++    ! (I_FLUX_SPEC with fbotpart = 0) keeps the particles in the model, as CAM does
++    ! for its tracers, and makes DD the surface flux only.
++    if (carma_as_top_noflux) then
++      carma%f_ibbnd_pc = I_FLUX_SPEC
++      if (masterproc) write(LUNOPRT,*) 'carma_register: zero-flux model top for particles (carma_as_top_noflux)'
++    end if
++!--AS
+     
+     
+     ! The elements and gases from CARMA need to be added as constituents in
+@@ -392,7 +430,16 @@
        if (rc < 0) call endrun('carma_register::CARMAGAS_Get failed.')
          
        ! Is the gas already defined?
@@ -57,7 +81,7 @@
    
        ! For substepping, we need to store the last mmr values for the gas.
        call pbuf_add_field('CG' // shortname, 'global',dtype_r8, (/pcols, pver/), ipbuf4gas(igas))
-@@ -663,7 +693,20 @@
+@@ -663,7 +710,20 @@
        gtndname(igas) = trim(cnst_name(icnst)) // 'TC'
  
        call addfld(gtndname(igas), (/ 'lev' /), 'A',     'kg/kg/s', trim(cnst_name(icnst)) // ' CARMA tendency')
@@ -78,7 +102,7 @@
        call addfld(trim(cnst_name(icnst))//'SI', (/ 'lev' /), 'A', 'ratio',   &
             trim(cnst_name(icnst)) // ' saturation wrt ice')
        call addfld(trim(cnst_name(icnst))//'SL', (/ 'lev' /), 'A', 'ratio',   &
-@@ -680,6 +723,13 @@
+@@ -680,6 +740,13 @@
           call add_default(trim(cnst_name(icnst))//'SL', 1, ' ')
        end if
      end do
@@ -92,7 +116,7 @@
      
      if (carma_do_thermo) then
         call addfld('CRTT', (/ 'lev' /), 'A',     'K/s', ' CARMA temperature tendency')
-@@ -908,6 +958,9 @@
+@@ -908,6 +975,9 @@
      use camsrfexch,       only: cam_in_t, cam_out_t
      use scamMod,          only: single_column
      use planck,           only: planckIntensity
@@ -102,7 +126,7 @@
      
      implicit none
  
-@@ -1012,6 +1065,9 @@
+@@ -1012,6 +1082,9 @@
      real(r8)              :: radint(pver,NWAVE)                     ! radiative intensity (W/m2/sr/cm)
      real(kind=f)          :: dwave(NWAVE)                           ! the wavelengths widths (cm)
      real(kind=f)          :: wave(NWAVE)                            ! the center wavelengths (cm)
@@ -112,18 +136,18 @@
  
      integer               :: max_nsubstep
      real(kind=f)          :: max_nretry
-@@ -1138,6 +1194,10 @@
-       if (rc < 0) call endrun('carma_timestep_tend::CARMASTATE_CreateFromReference failed.')
+@@ -1139,6 +1212,10 @@
      end if
  
-+
+ 
 +!++AS
 +    asgask(:, :) = 0.0_r8
 +!--AS
- 
++
      ! Process each column.
      do icol = 1, state_loc%ncol
-@@ -1365,12 +1425,25 @@
+     
+@@ -1365,12 +1442,25 @@
        end if
      
      
@@ -149,7 +173,7 @@
              
  
        ! Get the results for the CARMA particles.
-@@ -1590,6 +1663,9 @@
+@@ -1590,6 +1680,9 @@
       
      ! Output diagnostic fields.
      call carma_output_diagnostics(state_loc, ptend, gpdiags, sbdiags, gsdiags, spdiags, bndiags)
@@ -159,7 +183,7 @@
  
    end subroutine carma_timestep_tend
    
-@@ -1704,6 +1780,9 @@
+@@ -1704,6 +1797,9 @@
      integer                      :: rc                 ! CARMA return code
      integer                      :: cnsttype           ! constituent type
      integer                      :: maxbin             ! last prognostic bin
@@ -169,7 +193,7 @@
  
      ! Initialize the return code.
      rc = 0
-@@ -1745,6 +1824,22 @@
+@@ -1745,6 +1841,22 @@
      
      ! NOTE: There is currently no initialization for gases, but it could be
      ! added here.
@@ -192,7 +216,7 @@
      
      return
    end subroutine carma_init_cnst
-@@ -1906,6 +2001,9 @@
+@@ -1906,6 +2018,9 @@
      integer      :: ielem                   ! element index
      integer      :: ibin                    ! bin index
      integer      :: icnst                   ! consituent index
@@ -202,7 +226,7 @@
      real(r8)     :: tendency(pcols, pver)   ! constituent tendency (kg/kg/s)
      real(r8)     :: surfaceFlux(pcols)      ! constituent surface flux (kg/m^2/s)
      integer      :: cnsttype                ! constituent type
-@@ -1960,7 +2058,19 @@
+@@ -1960,7 +2075,19 @@
      enddo
      
      ! No emissions rate is set up for gases, but it could be added here.

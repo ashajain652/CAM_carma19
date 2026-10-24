@@ -1504,6 +1504,7 @@ elsif ($carma eq 'arsenic_msp') {
   add_default($nl, 'carma_as_do_uptake',  'val'=>'.true.');
   add_default($nl, 'carma_as_do_fuchs',   'val'=>'.true.');
   add_default($nl, 'carma_as_do_binshift', 'val'=>'.true.');
+  add_default($nl, 'carma_as_top_noflux', 'val'=>'.true.');
 }
 elsif ($carma eq 'mixed_sulfate') {
   add_default($nl, 'carma_do_coag',     'val'=>'.true.');

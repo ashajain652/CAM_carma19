@@ -157,6 +157,7 @@ contains
       if (do_print) write(LUNOPRT,*) '  carma_as_do_uptake  = ', carma_as_do_uptake
       if (do_print) write(LUNOPRT,*) '  carma_as_do_fuchs   = ', carma_as_do_fuchs
       if (do_print) write(LUNOPRT,*) '  carma_as_do_binshift= ', carma_as_do_binshift
+      if (do_print) write(LUNOPRT,*) '  carma_as_top_noflux = ', carma_as_top_noflux
     end if
     
     
