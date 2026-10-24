@@ -11,6 +11,8 @@
 !   4) carma_init_cnst: initialize gas constituents to 0 where mask is true.
 !   5) carma_init / carma_timestep_tend: history field ASGASK, the arsenic gas
 !      uptake loss rate k [1/s] used by arsenic_uptake_mod at each level.
+!   6) carma_register: with carma_as_top_noflux, make the model top a zero-flux
+!      boundary for particle transport, so the DD fields are the surface flux only.
 ! See README.md and carma_intr.F90.patch in this directory.
 !--AS
 !! This module is a coupler between the CAM model and the Community Aerosol
@@ -38,6 +40,7 @@ module carma_intr
   use carma_mod
 !++AS
   use arsenic_uptake_mod, only: arsenic_uptake_reset, arsenic_uptake_getk
+  use carma_model_flags_mod, only: carma_as_top_noflux
 !--AS
   
   use shr_kind_mod,   only: r8 => shr_kind_r8
@@ -358,6 +361,20 @@ contains
                           gstickl       = carma_gstickl, &
                           tstick        = carma_tstick)
     if (rc < 0) call endrun('carma_register::CARMA_Initialize failed.')
+
+!++AS
+    ! CARMA_Initialize sets both boundaries for particle transport to a fixed
+    ! concentration of 0. For I_HYBRID, level 1 is the model top and CARMA's
+    ! "bottom" boundary (ibbnd_pc) is the level-1 interface (vertadv, vertdif), so
+    ! diffusion carries particles out of the model top. vertical.F90 counts any
+    ! column loss as surface deposition (pc_surf, the DD fields). A zero-flux top
+    ! (I_FLUX_SPEC with fbotpart = 0) keeps the particles in the model, as CAM does
+    ! for its tracers, and makes DD the surface flux only.
+    if (carma_as_top_noflux) then
+      carma%f_ibbnd_pc = I_FLUX_SPEC
+      if (masterproc) write(LUNOPRT,*) 'carma_register: zero-flux model top for particles (carma_as_top_noflux)'
+    end if
+!--AS
     
     
     ! The elements and gases from CARMA need to be added as constituents in

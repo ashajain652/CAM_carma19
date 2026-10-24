@@ -87,6 +87,9 @@ a header naming the original.
      computed (`as_gamma <= 0` or `gc <= 0` at that level), and everywhere when
      `carma_as_do_uptake = .false.`. Where `k*dtime < 1e-30` the computed `k` is
      written although nothing is moved. No fill value is used.
+  6. `carma_register`, right after `CARMA_Initialize`: if `carma_as_top_noflux`
+     (default `.true.`, added 2026-10-24), set `carma%f_ibbnd_pc = I_FLUX_SPEC`.
+     See "Model-top boundary" below.
 - **Why:** the stock interface assumes CARMA gases (H2O, H2SO4) already exist as CAM
   constituents and have no CARMA emission. `ASGAS` is new and emitted by CARMA.
   `ASGASK` gives the exact `k` for WP7 test 2; an offline recomputation from the
@@ -164,6 +167,30 @@ extra mass. `base/rhopart.F90` computes the particle density from
 `rhop` and the fall speed of the smoke. Where core mass exceeds `rmass*N` it caps
 the density and resets the number, `pc(iepart) = mcore/rmass`. The uptake therefore
 can change `DUSTnn`; see risk R2 in the plan.
+
+## Model-top boundary (`carma_as_top_noflux`, default `.true.`, added 2026-10-24)
+
+`CARMA_InitializeVertical` (`base/carma_mod.F90`) hardcodes both particle-transport
+boundaries to `I_FIXED_CONC` with a concentration of 0. For `I_HYBRID`, level 1 is the
+model top, and `vertadv`/`vertdif` apply `ibbnd_pc` at the level-1 interface (and
+`itbnd_pc` at `NZP1`, the surface). So molecular and eddy diffusion carried smoke and
+arsenic out through the model top into a zero-concentration boundary.
+
+`base/vertical.F90` sets `pc_surf` (the `DD` history fields) to the column loss in each
+transport step, which is only the surface flux if nothing leaves through the top. With
+the default boundary, `DD` was dominated by this top loss. In the WP8 2-day run,
+`DUSTASnnDD` was about 1e-23 kg/m2/s, almost all in bin 1, while `DUSTAS` in the lowest
+level was about 1e-48 kg/kg.
+
+With the flag on, the level-1 boundary is `I_FLUX_SPEC` with `fbotpart = 0`: `vertadv`
+sets `vtrans(1) = 0` and `vertdif` sets `vertdifu(1) = vertdifd(1) = 0`, so there is no
+flux through the top and `DD` is the surface flux only. The surface boundary is
+unchanged. This also affects the smoke, which is no longer bit-for-bit with the CARMA
+default. `.false.` restores the CARMA default.
+
+The change is in this model's `carma_intr.F90` override, not `CARMA_InitializeModel`,
+because `CARMA_InitializeModel` gets `carma` as `intent(in)`, and `CARMA_Initialize`
+(which calls `CARMA_InitializeVertical`) runs after `CARMA_DefineModel`.
 
 ## Regenerating the patches
 

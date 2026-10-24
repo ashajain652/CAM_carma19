@@ -37,6 +37,7 @@ module carma_model_flags_mod
   logical, public                :: carma_as_do_uptake  = .true.   ! If .true. then do uptake of arsenic gas onto smoke
   logical, public                :: carma_as_do_fuchs   = .true.   ! If .true. then apply the Fuchs-Sutugin correction to the uptake
   logical, public                :: carma_as_do_binshift = .true.  ! If .true. then the arsenic taken up adds to the particle mass (bin shift)
+  logical, public                :: carma_as_top_noflux = .true.   ! If .true. then no particle flux through the model top (DD is surface only)
 
 contains
 
@@ -71,7 +72,8 @@ contains
       carma_as_gamma, &
       carma_as_do_uptake, &
       carma_as_do_fuchs, &
-      carma_as_do_binshift
+      carma_as_do_binshift, &
+      carma_as_top_noflux
 
     if (masterproc) then
        unitn = getunit()
@@ -96,6 +98,7 @@ contains
     call mpibcast(carma_as_do_uptake,  1,                      mpilog,  0, mpicom)
     call mpibcast(carma_as_do_fuchs,   1,                      mpilog,  0, mpicom)
     call mpibcast(carma_as_do_binshift, 1,                     mpilog,  0, mpicom)
+    call mpibcast(carma_as_top_noflux, 1,                      mpilog,  0, mpicom)
 #endif
 
   end subroutine carma_model_readnl
