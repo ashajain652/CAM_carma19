@@ -1,6 +1,6 @@
 --- cam/carma_intr.F90
 +++ models/arsenic_msp/carma_intr.F90
-@@ -1,3 +1,23 @@
+@@ -1,3 +1,25 @@
 +!++AS
 +! OVERRIDE of CAM src/physics/carma/cam/carma_intr.F90 (CAM cam_cesm2_1_rel_60), for
 +! the CARMA arsenic_msp model. This copy is found before cam/ because the model
@@ -19,12 +19,14 @@
 +!   7) carma_init / carma_output_diagnostics / carma_wetdep_tend: bin-summed
 +!      surface deposition fields <element>DD and <element>SW (e.g. DUSTASDD,
 +!      DUSTASSW), the sums of the per-bin fields over bins 1..maxbin.
++!   8) carma_init / carma_timestep_tend: bin-summed 3-D mass mixing ratio <element>MR
++!      (DUSTASMR) for each core-mass element, summed like the group field <group>MR.
 +! See README.md and carma_intr.F90.patch in this directory.
 +!--AS
  !! This module is a coupler between the CAM model and the Community Aerosol
  !! and Radiation Model for Atmospheres (CARMA) microphysics model. It adds the
  !! capabilities of CARMA to CAM, allowing for binned microphysics studies
-@@ -21,6 +41,10 @@
+@@ -21,6 +43,10 @@
    use carmasolute_mod
    use carmastate_mod
    use carma_mod
@@ -35,7 +37,7 @@
    
    use shr_kind_mod,   only: r8 => shr_kind_r8
    use spmd_utils,     only: masterproc
-@@ -115,6 +139,9 @@
+@@ -115,6 +141,9 @@
    ! Constituent Mappings      
    integer                        :: icnst4elem(NELEM, NBIN)       ! constituent index for a carma element
    integer                        :: icnst4gas(NGAS)               ! constituent index for a carma gas
@@ -45,7 +47,7 @@
  
    character(len=16)              :: btndname(NGROUP, NBIN)        ! names of group per bin tendencies
    character(len=16)              :: etndname(NELEM, NBIN)         ! names of element tendencies
-@@ -337,6 +364,20 @@
+@@ -337,6 +366,20 @@
                            gstickl       = carma_gstickl, &
                            tstick        = carma_tstick)
      if (rc < 0) call endrun('carma_register::CARMA_Initialize failed.')
@@ -66,7 +68,7 @@
      
      
      ! The elements and gases from CARMA need to be added as constituents in
-@@ -392,7 +433,16 @@
+@@ -392,7 +435,16 @@
        if (rc < 0) call endrun('carma_register::CARMAGAS_Get failed.')
          
        ! Is the gas already defined?
@@ -84,12 +86,22 @@
    
        ! For substepping, we need to store the last mmr values for the gas.
        call pbuf_add_field('CG' // shortname, 'global',dtype_r8, (/pcols, pver/), ipbuf4gas(igas))
-@@ -603,7 +653,29 @@
-           end if
-         end if
-       end do
-+    end do
+@@ -529,7 +581,10 @@
+     integer           :: maxbin       ! last prognostic bin
+     logical           :: is_cloud     ! is the group a cloud?
+     logical           :: do_drydep    ! is dry deposition enabled?
+- 
++!++AS
++    integer           :: itype        ! element type
++!--AS
 +
+     integer                    :: i
+     integer                    :: ier
+     integer                    :: ncid, dimid_lev, lev, vid_T
+@@ -605,6 +660,45 @@
+       end do
+     end do
+ 
 +!++AS
 +    ! Bin-summed surface deposition fluxes for each element of a prognostic group,
 +    ! registered like the per-bin <element>nnSW and <element>nnDD fields above.
@@ -109,12 +121,30 @@
 +               trim(sname) // ' dry deposition flux at surface, sum over bins')
 +        end if
 +      end if
-     end do
++    end do
++
++    ! Bin-summed mass mixing ratio <element>MR (e.g. DUSTASMR) for each core-mass
++    ! element of a prognostic group. Only core-mass elements, since the group field
++    ! <group>MR has the same name as <element>MR when the element and group share a
++    ! short name (DUST).
++    do ielem = 1, NELEM
++      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=sname, itype=itype)
++      if (rc < 0) call endrun('carma_init::CARMAELEMENT_Get failed.')
++
++      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype)
++      if (rc < 0) call endrun('carma_init::CARMAGROUP_Get failed.')
++
++      if ((cnsttype == I_CNSTTYPE_PROGNOSTIC) .and. (itype == I_COREMASS)) then
++        call addfld(trim(sname)//'MR', (/ 'lev' /), 'A', 'kg/kg', &
++             trim(sname) // ' mass mixing ratio, sum over bins')
++      end if
++    end do
 +!--AS
- 
++
      do igroup = 1, NGROUP
        call CARMAGROUP_Get(carma, igroup, rc, shortname=sname, is_cloud=is_cloud, do_drydep=do_drydep)
-@@ -663,7 +735,20 @@
+       if (rc < 0) call endrun('carma_init::CARMAGROUP_GetGroup failed.')
+@@ -663,6 +757,19 @@
        gtndname(igas) = trim(cnst_name(icnst)) // 'TC'
  
        call addfld(gtndname(igas), (/ 'lev' /), 'A',     'kg/kg/s', trim(cnst_name(icnst)) // ' CARMA tendency')
@@ -127,15 +157,14 @@
 +           call add_default(cnst_name(icnst), 1, ' ')
 +        end if
 +      end if
- 
++
 +      call addfld(trim(cnst_name(icnst))//'EM', (/ 'lev' /), 'A', 'kg/kg/s', &
 +           trim(cnst_name(icnst)) // ' emission')
 +!--AS
-+
+ 
        call addfld(trim(cnst_name(icnst))//'SI', (/ 'lev' /), 'A', 'ratio',   &
             trim(cnst_name(icnst)) // ' saturation wrt ice')
-       call addfld(trim(cnst_name(icnst))//'SL', (/ 'lev' /), 'A', 'ratio',   &
-@@ -680,6 +765,13 @@
+@@ -680,6 +787,13 @@
           call add_default(trim(cnst_name(icnst))//'SL', 1, ' ')
        end if
      end do
@@ -149,7 +178,7 @@
      
      if (carma_do_thermo) then
         call addfld('CRTT', (/ 'lev' /), 'A',     'K/s', ' CARMA temperature tendency')
-@@ -908,6 +1000,9 @@
+@@ -908,6 +1022,9 @@
      use camsrfexch,       only: cam_in_t, cam_out_t
      use scamMod,          only: single_column
      use planck,           only: planckIntensity
@@ -159,28 +188,32 @@
      
      implicit none
  
-@@ -1012,6 +1107,9 @@
+@@ -1012,6 +1129,12 @@
      real(r8)              :: radint(pver,NWAVE)                     ! radiative intensity (W/m2/sr/cm)
      real(kind=f)          :: dwave(NWAVE)                           ! the wavelengths widths (cm)
      real(kind=f)          :: wave(NWAVE)                            ! the center wavelengths (cm)
 +!++AS
 +    real(r8)              :: asgask(pcols, pver)                    ! arsenic gas uptake loss rate (1/s)
++    real(r8)              :: emrdiags(pcols, pver, NELEM)           ! element mass mixing ratio, sum over bins (kg/kg)
++    integer               :: itype                                  ! element type
++    character(len=8)      :: shortname                              ! element short name
 +!--AS
  
      integer               :: max_nsubstep
      real(kind=f)          :: max_nretry
-@@ -1139,6 +1237,10 @@
+@@ -1139,6 +1262,11 @@
      end if
  
  
 +!++AS
 +    asgask(:, :) = 0.0_r8
++    emrdiags(:, :, :) = 0.0_r8
 +!--AS
 +
      ! Process each column.
      do icol = 1, state_loc%ncol
      
-@@ -1365,12 +1467,25 @@
+@@ -1365,12 +1493,25 @@
        end if
      
      
@@ -206,17 +239,43 @@
              
  
        ! Get the results for the CARMA particles.
-@@ -1590,6 +1705,9 @@
+@@ -1435,7 +1576,11 @@
+             
+               ! Update the consituent tendency.
+               ptend%q(icol, :, icnst) = (newstate(:) - state_loc%q(icol, :, icnst)) / dt
+-              
++!++AS
++              ! Element sum over the prognostic bins, as for the group MR below.
++              emrdiags(icol, :, ielem) = emrdiags(icol, :, ielem) + newstate(:)
++!--AS
++
+               if (grp_do_drydep) then
+                 sbdiags(icol, ibin, ielem, SBDIAGS_DD) = dd / dt
+                 sbdiags(icol, ibin, ielem, SBDIAGS_VD) = - vd / 100._r8
+@@ -1590,6 +1735,22 @@
       
      ! Output diagnostic fields.
      call carma_output_diagnostics(state_loc, ptend, gpdiags, sbdiags, gsdiags, spdiags, bndiags)
 +!++AS
 +    call outfld('ASGASK', asgask, pcols, lchnk)
++
++    ! Bin-summed mass mixing ratio of each core-mass element (see carma_init).
++    do ielem = 1, NELEM
++      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=shortname, itype=itype)
++      if (rc < 0) call endrun('carma_timestep_tend::CARMAELEMENT_Get failed.')
++
++      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype)
++      if (rc < 0) call endrun('carma_timestep_tend::CARMAGROUP_Get failed.')
++
++      if ((cnsttype == I_CNSTTYPE_PROGNOSTIC) .and. (itype == I_COREMASS)) then
++        call outfld(trim(shortname)//'MR', emrdiags(:, :, ielem), pcols, lchnk)
++      end if
++    end do
 +!--AS
  
    end subroutine carma_timestep_tend
    
-@@ -1704,6 +1822,9 @@
+@@ -1704,6 +1865,9 @@
      integer                      :: rc                 ! CARMA return code
      integer                      :: cnsttype           ! constituent type
      integer                      :: maxbin             ! last prognostic bin
@@ -226,7 +285,7 @@
  
      ! Initialize the return code.
      rc = 0
-@@ -1745,6 +1866,22 @@
+@@ -1745,6 +1909,22 @@
      
      ! NOTE: There is currently no initialization for gases, but it could be
      ! added here.
@@ -249,7 +308,7 @@
      
      return
    end subroutine carma_init_cnst
-@@ -1832,6 +1969,21 @@
+@@ -1832,6 +2012,21 @@
          end if
        end do
      end do
@@ -271,7 +330,7 @@
      
      ! Output the particle diagnostics.
      do igroup = 1, NGROUP 
-@@ -1906,6 +2058,9 @@
+@@ -1906,6 +2101,9 @@
      integer      :: ielem                   ! element index
      integer      :: ibin                    ! bin index
      integer      :: icnst                   ! consituent index
@@ -281,7 +340,7 @@
      real(r8)     :: tendency(pcols, pver)   ! constituent tendency (kg/kg/s)
      real(r8)     :: surfaceFlux(pcols)      ! constituent surface flux (kg/m^2/s)
      integer      :: cnsttype                ! constituent type
-@@ -1960,6 +2115,18 @@
+@@ -1960,6 +2158,18 @@
      enddo
      
      ! No emissions rate is set up for gases, but it could be added here.
@@ -300,7 +359,7 @@
  
      return
    end subroutine carma_emission_tend 
-@@ -2026,6 +2193,10 @@
+@@ -2026,6 +2236,10 @@
      integer                             :: k
      real(r8)                            :: sflx(pcols)            ! Surface Flux (kg/m2/s)
      integer                             :: maxbin
@@ -311,7 +370,7 @@
  
      ! physics buffer 
      integer itim_old, ifld
-@@ -2111,6 +2282,10 @@
+@@ -2111,6 +2325,10 @@
        if (rc < 0) call endrun('carma_wetdep_tend::CARMAGROUP_Get failed.')
        
        if ((do_wetdep) .and. (cnsttype == I_CNSTTYPE_PROGNOSTIC)) then
@@ -322,7 +381,7 @@
        
          do ibin = 1, NBIN
          
-@@ -2195,12 +2370,22 @@
+@@ -2195,12 +2413,22 @@
              enddo
  
              call outfld(trim(cnst_name(icnst))//'SW', sflx, pcols, lchnk)

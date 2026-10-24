@@ -16,6 +16,8 @@
 !   7) carma_init / carma_output_diagnostics / carma_wetdep_tend: bin-summed
 !      surface deposition fields <element>DD and <element>SW (e.g. DUSTASDD,
 !      DUSTASSW), the sums of the per-bin fields over bins 1..maxbin.
+!   8) carma_init / carma_timestep_tend: bin-summed 3-D mass mixing ratio <element>MR
+!      (DUSTASMR) for each core-mass element, summed like the group field <group>MR.
 ! See README.md and carma_intr.F90.patch in this directory.
 !--AS
 !! This module is a coupler between the CAM model and the Community Aerosol
@@ -579,7 +581,10 @@ contains
     integer           :: maxbin       ! last prognostic bin
     logical           :: is_cloud     ! is the group a cloud?
     logical           :: do_drydep    ! is dry deposition enabled?
- 
+!++AS
+    integer           :: itype        ! element type
+!--AS
+
     integer                    :: i
     integer                    :: ier
     integer                    :: ncid, dimid_lev, lev, vid_T
@@ -673,6 +678,23 @@ contains
           call addfld(trim(sname)//'DD', horiz_only, 'A', 'kg/m2/s', &
                trim(sname) // ' dry deposition flux at surface, sum over bins')
         end if
+      end if
+    end do
+
+    ! Bin-summed mass mixing ratio <element>MR (e.g. DUSTASMR) for each core-mass
+    ! element of a prognostic group. Only core-mass elements, since the group field
+    ! <group>MR has the same name as <element>MR when the element and group share a
+    ! short name (DUST).
+    do ielem = 1, NELEM
+      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=sname, itype=itype)
+      if (rc < 0) call endrun('carma_init::CARMAELEMENT_Get failed.')
+
+      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype)
+      if (rc < 0) call endrun('carma_init::CARMAGROUP_Get failed.')
+
+      if ((cnsttype == I_CNSTTYPE_PROGNOSTIC) .and. (itype == I_COREMASS)) then
+        call addfld(trim(sname)//'MR', (/ 'lev' /), 'A', 'kg/kg', &
+             trim(sname) // ' mass mixing ratio, sum over bins')
       end if
     end do
 !--AS
@@ -1109,6 +1131,9 @@ contains
     real(kind=f)          :: wave(NWAVE)                            ! the center wavelengths (cm)
 !++AS
     real(r8)              :: asgask(pcols, pver)                    ! arsenic gas uptake loss rate (1/s)
+    real(r8)              :: emrdiags(pcols, pver, NELEM)           ! element mass mixing ratio, sum over bins (kg/kg)
+    integer               :: itype                                  ! element type
+    character(len=8)      :: shortname                              ! element short name
 !--AS
 
     integer               :: max_nsubstep
@@ -1239,6 +1264,7 @@ contains
 
 !++AS
     asgask(:, :) = 0.0_r8
+    emrdiags(:, :, :) = 0.0_r8
 !--AS
 
     ! Process each column.
@@ -1550,7 +1576,11 @@ contains
             
               ! Update the consituent tendency.
               ptend%q(icol, :, icnst) = (newstate(:) - state_loc%q(icol, :, icnst)) / dt
-              
+!++AS
+              ! Element sum over the prognostic bins, as for the group MR below.
+              emrdiags(icol, :, ielem) = emrdiags(icol, :, ielem) + newstate(:)
+!--AS
+
               if (grp_do_drydep) then
                 sbdiags(icol, ibin, ielem, SBDIAGS_DD) = dd / dt
                 sbdiags(icol, ibin, ielem, SBDIAGS_VD) = - vd / 100._r8
@@ -1707,6 +1737,19 @@ contains
     call carma_output_diagnostics(state_loc, ptend, gpdiags, sbdiags, gsdiags, spdiags, bndiags)
 !++AS
     call outfld('ASGASK', asgask, pcols, lchnk)
+
+    ! Bin-summed mass mixing ratio of each core-mass element (see carma_init).
+    do ielem = 1, NELEM
+      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=shortname, itype=itype)
+      if (rc < 0) call endrun('carma_timestep_tend::CARMAELEMENT_Get failed.')
+
+      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype)
+      if (rc < 0) call endrun('carma_timestep_tend::CARMAGROUP_Get failed.')
+
+      if ((cnsttype == I_CNSTTYPE_PROGNOSTIC) .and. (itype == I_COREMASS)) then
+        call outfld(trim(shortname)//'MR', emrdiags(:, :, ielem), pcols, lchnk)
+      end if
+    end do
 !--AS
 
   end subroutine carma_timestep_tend
