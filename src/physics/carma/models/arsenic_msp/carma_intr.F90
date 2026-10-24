@@ -13,6 +13,9 @@
 !      uptake loss rate k [1/s] used by arsenic_uptake_mod at each level.
 !   6) carma_register: with carma_as_top_noflux, make the model top a zero-flux
 !      boundary for particle transport, so the DD fields are the surface flux only.
+!   7) carma_init / carma_output_diagnostics / carma_wetdep_tend: bin-summed
+!      surface deposition fields <element>DD and <element>SW (e.g. DUSTASDD,
+!      DUSTASSW), the sums of the per-bin fields over bins 1..maxbin.
 ! See README.md and carma_intr.F90.patch in this directory.
 !--AS
 !! This module is a coupler between the CAM model and the Community Aerosol
@@ -651,6 +654,28 @@ contains
         end if
       end do
     end do
+
+!++AS
+    ! Bin-summed surface deposition fluxes for each element of a prognostic group,
+    ! registered like the per-bin <element>nnSW and <element>nnDD fields above.
+    do ielem = 1, NELEM
+      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=sname)
+      if (rc < 0) call endrun('carma_init::CARMAELEMENT_Get failed.')
+
+      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype, do_drydep=do_drydep)
+      if (rc < 0) call endrun('carma_init::CARMAGROUP_Get failed.')
+
+      if (cnsttype == I_CNSTTYPE_PROGNOSTIC) then
+        call addfld(trim(sname)//'SW', horiz_only, 'A', 'kg/m2/s', &
+             trim(sname) // ' wet deposition flux at surface, sum over bins')
+
+        if (do_drydep) then
+          call addfld(trim(sname)//'DD', horiz_only, 'A', 'kg/m2/s', &
+               trim(sname) // ' dry deposition flux at surface, sum over bins')
+        end if
+      end if
+    end do
+!--AS
 
     do igroup = 1, NGROUP
       call CARMAGROUP_Get(carma, igroup, rc, shortname=sname, is_cloud=is_cloud, do_drydep=do_drydep)
@@ -1944,6 +1969,21 @@ contains
         end if
       end do
     end do
+
+!++AS
+    ! Bin-summed dry deposition flux, over the same bins as the per-bin DD fields.
+    do ielem = 1, NELEM
+      call CARMAELEMENT_Get(carma, ielem, rc, igroup=igroup, shortname=sname)
+      if (rc < 0) call endrun('carma_output_diagnostics::CARMAELEMENT_Get failed.')
+
+      call CARMAGROUP_Get(carma, igroup, rc, cnsttype=cnsttype, maxbin=maxbin, do_drydep=do_drydep)
+      if (rc < 0) call endrun('carma_output_diagnostics::CARMAGROUP_Get failed.')
+
+      if ((cnsttype == I_CNSTTYPE_PROGNOSTIC) .and. do_drydep) then
+        call outfld(trim(sname)//'DD', sum(sbdiags(:, 1:maxbin, ielem, SBDIAGS_DD), dim=2), pcols, lchnk)
+      end if
+    end do
+!--AS
     
     ! Output the particle diagnostics.
     do igroup = 1, NGROUP 
@@ -2153,6 +2193,10 @@ contains
     integer                             :: k
     real(r8)                            :: sflx(pcols)            ! Surface Flux (kg/m2/s)
     integer                             :: maxbin
+!++AS
+    real(r8)                            :: sflx_sum(pcols)        ! Surface Flux summed over bins (kg/m2/s)
+    character(len=8)                    :: sname                  ! element short (CAM) name
+!--AS
 
     ! physics buffer 
     integer itim_old, ifld
@@ -2238,6 +2282,10 @@ contains
       if (rc < 0) call endrun('carma_wetdep_tend::CARMAGROUP_Get failed.')
       
       if ((do_wetdep) .and. (cnsttype == I_CNSTTYPE_PROGNOSTIC)) then
+
+!++AS
+        sflx_sum(:) = 0._r8
+!--AS
       
         do ibin = 1, NBIN
         
@@ -2322,12 +2370,22 @@ contains
             enddo
 
             call outfld(trim(cnst_name(icnst))//'SW', sflx, pcols, lchnk)
+!++AS
+            sflx_sum(:ncol) = sflx_sum(:ncol) + sflx(:ncol)
+!--AS
 
             ! Add this to the surface amount of the constituent
             call CARMA_WetDeposition(carma, ielem, ibin, sflx, cam_out, state, rc)
  
           end if
         end do
+
+!++AS
+        ! Bin-summed wet deposition flux, over the same bins as the per-bin SW fields.
+        call CARMAELEMENT_Get(carma, ielem, rc, shortname=sname)
+        if (rc < 0) call endrun('carma_wetdep_tend::CARMAELEMENT_Get failed.')
+        call outfld(trim(sname)//'SW', sflx_sum, pcols, lchnk)
+!--AS
       end if
     end do
 

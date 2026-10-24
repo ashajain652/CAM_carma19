@@ -90,6 +90,15 @@ a header naming the original.
   6. `carma_register`, right after `CARMA_Initialize`: if `carma_as_top_noflux`
      (default `.true.`, added 2026-10-24), set `carma%f_ibbnd_pc = I_FLUX_SPEC`.
      See "Model-top boundary" below.
+  7. Bin-summed surface deposition (added 2026-10-24): for each element of a
+     prognostic group, `carma_init` registers `<element>SW` and, if the group does dry
+     deposition, `<element>DD` (kg/m2/s, horizontal, averaging flag 'A'). Here that is
+     `DUSTASSW`, `DUSTASDD` (arsenic) and `DUSTSW`, `DUSTDD` (smoke plus arsenic, as
+     `DUSTnn`). `carma_output_diagnostics` writes `<element>DD` as the sum of
+     `sbdiags(:, 1:maxbin, ielem, SBDIAGS_DD)`; `carma_wetdep_tend` writes
+     `<element>SW` as the sum of the per-bin `sflx`. Both are the sums of the per-bin
+     fields over bins 1..maxbin, so production runs need 2 fields per element
+     instead of 2 x 28. Neither is on a tape by default; add them to `fincl`.
 - **Why:** the stock interface assumes CARMA gases (H2O, H2SO4) already exist as CAM
   constituents and have no CARMA emission. `ASGAS` is new and emitted by CARMA.
   `ASGASK` gives the exact `k` for WP7 test 2; an offline recomputation from the
