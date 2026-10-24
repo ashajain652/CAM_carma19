@@ -99,6 +99,16 @@ a header naming the original.
      `<element>SW` as the sum of the per-bin `sflx`. Both are the sums of the per-bin
      fields over bins 1..maxbin, so production runs need 2 fields per element
      instead of 2 x 28. Neither is on a tape by default; add them to `fincl`.
+  8. Bin-summed mass mixing ratio (added 2026-10-24): for each core-mass element of a
+     prognostic group, `carma_init` registers `<element>MR` (kg/kg, 3-D, flag 'A'),
+     here `DUSTASMR`. `carma_timestep_tend` sums `newstate` over bins 1..maxbin after
+     `CARMASTATE_Step`, as the group field `DUSTMR` does, and writes it after
+     `ASGASK`. Only core-mass elements get the field: for `DUST`, element and group
+     share a short name and `DUSTMR` is already the group field (smoke plus
+     arsenic). Because it is sampled after the CARMA step in `tphysac`, while the
+     `DUSTASnn` history fields are `state%q` at the end of `tphysbc`, `DUSTASMR` is
+     not bit-for-bit `sum(DUSTASnn)`; they differ by the tendencies of the rest of
+     the physics step. Not on a tape by default.
 - **Why:** the stock interface assumes CARMA gases (H2O, H2SO4) already exist as CAM
   constituents and have no CARMA emission. `ASGAS` is new and emitted by CARMA.
   `ASGASK` gives the exact `k` for WP7 test 2; an offline recomputation from the
