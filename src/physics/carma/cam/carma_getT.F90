@@ -10,7 +10,7 @@
     use ppgrid,           only: pcols, pver, pverp
     use cam_abortutils,   only: endrun
 
-    real(r8), intent(out)   :: T(pver)      ! midpoint temperature (Pa)
+    real(r8), intent(out)   :: T(pver)      ! midpoint temperature (K)
 
     integer                    :: iz           ! vertical index
     type(file_desc_t), pointer :: ncid_ini
@@ -22,7 +22,7 @@
     ncid_ini  => initial_file_get_id()
     nullify(init_t)
 
-    allocate(init_t(plon,pver,plat))
+    allocate(init_t(plon,plat,pver))
     call cam_pio_get_var('T', ncid_ini, init_t, found=found)
             
     if (.not. found) then
@@ -31,7 +31,7 @@
 
     ! Just do a simple average. Could get gw and do a weighted average.
     do iz = 1, pver
-      T(iz) = sum(init_t(:, iz, :)) / plat / plon
+      T(iz) = sum(init_t(:, :, iz)) / plat / plon
     end do
 
     deallocate(init_t)

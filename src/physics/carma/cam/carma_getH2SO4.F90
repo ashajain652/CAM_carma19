@@ -22,7 +22,7 @@
     ncid_ini  => initial_file_get_id()
     nullify(init_h2so4)
 
-    allocate(init_h2so4(plon,pver,plat))
+    allocate(init_h2so4(plon,plat,pver))
     call cam_pio_get_var('H2SO4', ncid_ini, init_h2so4, found=found)
             
     if (.not. found) then
@@ -31,7 +31,7 @@
 
     ! Just do a simple average. Could get gw and do a weighted average.
     do iz = 1, pver
-      h2so4(iz) = sum(init_h2so4(:, iz, :)) / plat / plon
+      h2so4(iz) = sum(init_h2so4(:, :, iz)) / plat / plon
     end do
 
     deallocate(init_h2so4)

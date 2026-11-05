@@ -22,7 +22,7 @@
     ncid_ini  => initial_file_get_id()
     nullify(init_h2o)
 
-    allocate(init_h2o(plon,pver,plat))
+    allocate(init_h2o(plon,plat,pver))
     call cam_pio_get_var('Q', ncid_ini, init_h2o, found=found)
             
     if (.not. found) then
@@ -31,7 +31,7 @@
 
     ! Just do a simple average. Could get gw and do a weighted average.
     do iz = 1, pver
-      h2o(iz) = sum(init_h2o(:, iz, :)) / plat / plon
+      h2o(iz) = sum(init_h2o(:, :, iz)) / plat / plon
     end do
 
     deallocate(init_h2o)
