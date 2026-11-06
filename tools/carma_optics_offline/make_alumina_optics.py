@@ -43,7 +43,7 @@ HERE = Path(__file__).resolve().parent
 # This directory is components/cam/tools/carma_optics_offline in a CESM checkout.
 MODELS = HERE.parents[1] / "src/physics/carma/models"
 DIN = Path(os.environ.get("DIN_LOC_ROOT", Path.home() / "MIT/cesm2_port/inputdata"))
-SIZES = ["0p01", "0p1", 2, 6, 10, 14, 18, 25, 35, 45, 50, 100, 150, 200, 250]
+SIZES = ["0p01", "0p1", "0p2", 2, 6, 10, 14, 18, 25, 35, 45, 50, 100, 150, 200, 250]
 NLW, NSW = 16, 14
 SHORTNAME = "CRALUM"
 FNUM = r"([0-9.eEdD+-]+)_f"

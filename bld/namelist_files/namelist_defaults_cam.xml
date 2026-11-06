@@ -322,6 +322,8 @@
 <carma_emis_psd_file    carma="alumina_d0p01um">atm/waccm/emis/alumina_mono_d0p01um_psd.nc</carma_emis_psd_file>
 <carma_emis_file        carma="alumina_d0p1um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
 <carma_emis_psd_file    carma="alumina_d0p1um">atm/waccm/emis/alumina_mono_d0p1um_psd.nc</carma_emis_psd_file>
+<carma_emis_file        carma="alumina_d0p2um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
+<carma_emis_psd_file    carma="alumina_d0p2um">atm/waccm/emis/alumina_mono_d0p2um_psd.nc</carma_emis_psd_file>
 <carma_emis_file        carma="alumina_d2um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>
 <carma_emis_psd_file    carma="alumina_d2um">atm/waccm/emis/alumina_mono_d2um_psd.nc</carma_emis_psd_file>
 <carma_emis_file        carma="alumina_d6um">atm/waccm/emis/alumina_test_events.nc</carma_emis_file>

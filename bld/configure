@@ -1459,10 +1459,10 @@ elsif ($carma_pkg eq 'meteor_smoke') {
     $carma_nadv = 28;
 }
 elsif ($carma_pkg eq 'alumina') {
-    $carma_nadv = 36;
+    $carma_nadv = 37;     # 36 bins plus ALUMUSED
 }
 elsif ($carma_pkg =~ /^alumina_d[0-9p]+um$/) {
-    $carma_nadv = 16;
+    $carma_nadv = 17;     # 16 bins plus ALUMUSED
 }
 elsif ($carma_pkg eq 'mixed_sulfate') {
     $carma_nadv = 84;
