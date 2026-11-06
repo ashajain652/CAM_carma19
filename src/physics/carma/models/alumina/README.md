@@ -48,7 +48,7 @@ There are two kinds of alumina model:
 - **`alumina`** (base model): 36 bins, `rmin = 0.5 nm`, `vmrat = 2`, so the bins span radii from about 0.5 nm to about 1.6 µm. It is meant for a realistic, altitude-dependent size distribution.
 - **`alumina_d<D>um`** (particle-size sensitivity models): 16 bins, `vmrat = 2`, with `rmin` equal to the emission radius `D/2`. A monodisperse emission puts 100% of the mass in bin 1, and bins 2-16 (up to 32× the emission radius) catch particles that grow by coagulation. `D` is the diameter in µm; `p` stands for a decimal point. The available sizes are:
 
-  `0p01, 0p1, 2, 6, 10, 14, 18, 25, 35, 45, 50, 100, 150, 200, 250`
+  `0p01, 0p1, 0p2, 2, 6, 10, 14, 18, 25, 35, 45, 50, 100, 150, 200, 250`
 
   Each `alumina_d<D>um` directory has its own `carma_model_mod.F90` (only `NBIN`, `rmin` and the header comment differ from the base model). Its other files are symlinks to `../alumina/`, so a fix in the base model applies to all of them.
 
@@ -131,6 +131,37 @@ File by file:
 **Tool** (`tools/carma_optics_offline/`): builds a stand-alone driver from CARMA's own source and writes the RRTMG optics files for the size models. See its `README.md`.
 
 Nothing outside CAM was changed. The other components (CLM, CICE, CIME, etc.) are the standard CESM2.1.5 versions.
+
+## Alumina as an ice nucleus in cirrus (`nucleate_ice_alum`)
+
+The alumina tracers can act as ice nuclei in CAM's `nucleate_ice` scheme, so a run can
+test how much reentry flux is needed to change cirrus. This is off by default and
+requires a CAM6 modal-aerosol run with an alumina size model. Use `alumina_d0p2um` as
+the main case (it matches the 200 nm size in Archuleta et al. 2005) and `alumina_d2um`
+as the side case (matched to Kanji et al.).
+
+| `user_nl_cam` setting | Purpose |
+|---|---|
+| `nucleate_ice_alum = .true.` | Alumina competes with dust as an ice nucleus |
+| `nucleate_ice_alum_lowrhi = .true.` | Extends activity below Si 1.39, down to Si 1.05 (for the 2 um case) |
+| `carma_emis_scale = N` | Multiplies the reentry emissions, which are released at 30-90 km |
+| `carma_alumina_rad_feedback = .false.` | Removes alumina's own radiative effect, to isolate the cloud response |
+| `hist_preexisting_ice = .true.` | Needed to write the nucleation diagnostics such as `NIHF` and `NIIMM` |
+
+The active fraction is F = 1 - exp(-ns * pi * D^2), with ns(T, Si) fitted to the
+Archuleta data for fresh commercial powder at -45 to -60 C and Si 1.39-1.66. Si includes
+CAM's subgrid factor of 1.2, so Si 1.39 is a grid-mean RHi of about 116%. Exposure time
+is not represented. Without `nucleate_ice_alum_lowrhi`, alumina is inactive below Si 1.39.
+
+History fields: `INnalum` (alumina added to the nucleating population, 1/m3) and
+`ALUMUSED` (alumina held in ice, 1/kg).
+
+`ALUMUSED` is a tracer, so only F*N - ALUMUSED can nucleate. It is capped at `NUMICE`
+each step, and the CARMA alumina mass does not change. The cap treats a lost crystal as
+releasing its particle, which overstates the return for crystals that fall out. It is
+written before microphysics, so `ALUMUSED` can briefly exceed `NUMICE` in near ice-free
+cells. Alumina builds have one more constituent than before, so **restarts from older
+alumina runs will not work**, and each new case should start fresh.
 
 ## 4. Installation: getting the code
 

@@ -42,6 +42,7 @@ module carma_intr
   ! Other Microphysics
   public carma_emission_tend            ! calculate tendency from emission source function
   public carma_wetdep_tend              ! calculate tendency from wet deposition
+  public carma_get_group_rmass
   
 contains
 
@@ -183,4 +184,9 @@ contains
     implicit none
 
   end subroutine carma_accumulate_stats
+  subroutine carma_get_group_rmass(shortname, rmass)
+    character(len=*), intent(in)       :: shortname
+    real(r8), allocatable, intent(out) :: rmass(:)
+  end subroutine carma_get_group_rmass
+
 end module carma_intr

@@ -2628,6 +2628,20 @@ the incloud relative humidity for nucleation is 1.
 Default: .true., except .false. for CAM6
 </entry>
 
+<entry id="nucleate_ice_alum" type="logical" category="microphys"
+       group="nucleate_ice_nl" valid_values="" >
+Add active CARMA alumina (CRALUM tracers) to the dust number used for cirrus
+nucleation. The active fraction depends on bin size, temperature and RHi.
+Default: FALSE
+</entry>
+
+<entry id="nucleate_ice_alum_lowrhi" type="logical" category="microphys"
+       group="nucleate_ice_nl" valid_values="" >
+Extend alumina activity below Si 1.39, where nothing is measured at these sizes,
+down to the Kanji and Abbatt (2006) onset. If false, alumina is inactive there.
+Default: FALSE
+</entry>
+
 <entry id="nucleate_ice_strat" type="real" category="microphys"
        group="nucleate_ice_nl" valid_values="" >
 Fraction of Aitken mode sulfate particles assumed to nucleate ice in the polar

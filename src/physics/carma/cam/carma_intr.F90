@@ -64,6 +64,7 @@ module carma_intr
   ! Other Microphysics
   public carma_emission_tend            ! calculate tendency from emission source function
   public carma_wetdep_tend              ! calculate tendency from wet deposition
+  public carma_get_group_rmass          ! particle mass by bin for a group
   
 
   ! Private data
@@ -199,6 +200,7 @@ contains
     real(r8)          :: r(NBIN)                  ! particle radius (cm)
     real(r8)          :: rmass(NBIN)              ! particle mass (g)
     character(len=8)  :: shortname                ! short (CAM) name
+    integer           :: icnst_alumused           ! index of ALUMUSED
     character(len=8)  :: grp_short                ! group short (CAM) name
     character(len=50) :: name                     ! long (CARMA) name
     real(r8)          :: wtmol                    ! gas molecular weight
@@ -385,6 +387,16 @@ contains
       end if
     end do
      
+    ! Number of alumina particles already held in ice (#/kg), used by nucleate_ice_cam.
+    do ielem = 1, NELEM
+      call CARMAELEMENT_Get(carma, ielem, rc, shortname=shortname)
+      if (rc < 0) call endrun('carma_register::CARMAELEMENT_Get failed.')
+      if (trim(shortname) == 'CRALUM') then
+        call cnst_add('ALUMUSED', WTMOL_AIR, cpair, 0._r8, icnst_alumused, &
+          longname='Alumina particles held in ice', mixtype=carma_mixtype)
+      end if
+    end do
+
     ! Find the constituent for the gas or add it if not found.
     do igas = 1, NGAS
   
@@ -2720,4 +2732,26 @@ write(carma%f_LUNOPRT,*) "CARMA mie calc:  done  ", Qext, Qsca, asym
     
     return 
   end subroutine CARMA_calcram 
+  !! Return the particle mass of each bin (g) for the group with this short name.
+  !! rmass stays unallocated if no group has the name.
+  subroutine carma_get_group_rmass(shortname, rmass)
+    character(len=*), intent(in)       :: shortname
+    real(r8), allocatable, intent(out) :: rmass(:)
+
+    character(len=8)                :: gname
+    real(kind=f)                    :: grmass(NBIN)
+    integer                         :: igroup, rc
+
+    rc = RC_OK
+    do igroup = 1, NGROUP
+      call CARMAGROUP_Get(carma, igroup, rc, shortname=gname, rmass=grmass)
+      if (rc < 0) call endrun('carma_get_group_rmass::CARMAGROUP_Get failed.')
+      if (trim(gname) == trim(shortname)) then
+        allocate(rmass(NBIN))
+        rmass = grmass(1:NBIN)
+        return
+      end if
+    end do
+  end subroutine carma_get_group_rmass
+
 end module carma_intr

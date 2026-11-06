@@ -53,6 +53,28 @@ real(r8)                   :: nucleate_ice_subgrid = -1._r8
 real(r8)                   :: nucleate_ice_subgrid_strat = -1._r8
 real(r8)                   :: nucleate_ice_strat = 0.0_r8
 
+! CARMA alumina (CRALUM tracers) added to the dust number seen by cirrus nucleation.
+! Each bin's active fraction is F = 1 - exp(-ns*area), with ns(T,Si) from the bare
+! alumina data of Archuleta et al. (2005), as log10 ns (m-2) = a + b*Si at -45 to
+! -60 C, for Si of 1.39 to 1.66. Below that there are no data for these sizes, and
+! alumina is inactive unless nucleate_ice_alum_lowrhi is set, which runs log10 ns
+! linearly down to the Kanji and Abbatt (2006) onset (about 6e6 m-2 at Si 1.05).
+! ALUMUSED tracks alumina held in ice, so only F*N - used can nucleate. Used particles
+! are released when NUMICE drops below them. Alumina mass stays in the CRALUM tracers.
+logical                    :: nucleate_ice_alum = .false.
+logical                    :: nucleate_ice_alum_lowrhi = .false.
+integer, parameter         :: nalum_t = 4
+real(r8), parameter        :: alum_tc(nalum_t) = (/ -45._r8, -50._r8, -55._r8, -60._r8 /)
+real(r8), parameter        :: alum_a(nalum_t)  = (/ -10.27_r8, -4.15_r8, 1.25_r8, 4.76_r8 /)
+real(r8), parameter        :: alum_b(nalum_t)  = (/ 14.16_r8, 10.20_r8, 6.67_r8, 4.38_r8 /)
+real(r8), parameter        :: alum_si_lo = 1.39_r8, alum_si_hi = 1.66_r8
+real(r8), parameter        :: alum_si_onset = 1.05_r8, alum_log10nsonset = 6.78_r8
+integer                    :: nalum_bin = 0
+integer                    :: alum_used_idx = -1
+integer,  allocatable      :: alum_idx(:)      ! constituent index of each bin
+real(r8), allocatable      :: alum_area(:)     ! particle surface area (m2)
+real(r8), allocatable      :: alum_invmass(:)  ! 1 / particle mass (1/kg)
+
 ! Vars set via init method.
 real(r8) :: mincld      ! minimum allowed cloud fraction
 real(r8) :: bulk_scale  ! prescribed aerosol bulk sulfur scale factor
@@ -125,7 +147,8 @@ subroutine nucleate_ice_cam_readnl(nlfile)
 
   namelist /nucleate_ice_nl/ use_preexisting_ice, hist_preexisting_ice, &
        nucleate_ice_subgrid, nucleate_ice_subgrid_strat, nucleate_ice_strat, &
-       nucleate_ice_incloud, nucleate_ice_use_troplev
+       nucleate_ice_incloud, nucleate_ice_use_troplev, &
+       nucleate_ice_alum, nucleate_ice_alum_lowrhi
 
   !-----------------------------------------------------------------------------
 
@@ -150,6 +173,8 @@ subroutine nucleate_ice_cam_readnl(nlfile)
   call mpi_bcast(nucleate_ice_subgrid, 1, mpi_real8,  masterprocid, mpicom, ierr)
   call mpi_bcast(nucleate_ice_subgrid_strat, 1, mpi_real8,  masterprocid, mpicom, ierr)
   call mpi_bcast(nucleate_ice_strat,   1, mpi_real8,  masterprocid, mpicom, ierr)
+  call mpi_bcast(nucleate_ice_alum,        1, mpi_logical, masterprocid, mpicom, ierr)
+  call mpi_bcast(nucleate_ice_alum_lowrhi, 1, mpi_logical, masterprocid, mpicom, ierr)
   call mpi_bcast(nucleate_ice_incloud, 1, mpi_logical,masterprocid, mpicom, ierr)
   call mpi_bcast(nucleate_ice_use_troplev, 1, mpi_logical,masterprocid, mpicom, ierr)
 
@@ -197,7 +222,11 @@ subroutine nucleate_ice_cam_init(mincld_in, bulk_scale_in)
       write(iulog,*) '  nucleate_ice_strat         = ', nucleate_ice_strat
       write(iulog,*) '  nucleate_ice_incloud       = ', nucleate_ice_incloud
       write(iulog,*) '  nucleate_ice_use_troplev   = ', nucleate_ice_use_troplev
+      write(iulog,*) '  nucleate_ice_alum          = ', nucleate_ice_alum
+      write(iulog,*) '  nucleate_ice_alum_lowrhi   = ', nucleate_ice_alum_lowrhi
    end if
+
+   if (nucleate_ice_alum) call alum_init()
 
    call cnst_get_ind('CLDLIQ', cldliq_idx)
    call cnst_get_ind('CLDICE', cldice_idx)
@@ -234,6 +263,8 @@ subroutine nucleate_ice_cam_init(mincld_in, bulk_scale_in)
                 'contribution for in-cloud ice number density increase by hom nucleation in ice cloud')
       call addfld ('INFrehom', (/ 'lev' /), 'A','frequency','hom IN frequency ice cloud')
       call addfld ('INFreIN',  (/ 'lev' /), 'A','frequency','frequency of ice nucleation occur')
+      call addfld ('INnalum',  (/ 'lev' /), 'A','1/m3','Active CARMA alumina number added to ice_nucleation')
+      call addfld ('ALUMUSED', (/ 'lev' /), 'A','1/kg','Alumina particles held in ice')
 
       if (hist_preexisting_ice) then
          call add_default ('WSUBI   ', 1, ' ')  ! addfld/outfld calls are in microp_aero
@@ -446,6 +477,11 @@ subroutine nucleate_ice_cam_calc( &
    real(r8) :: so4mc
    real(r8) :: oso4_num
    real(r8) :: odst_num
+   real(r8) :: alum_add                ! active alumina added to dust (#/cm^3)
+   real(r8) :: dst_num_nuc             ! dust plus alumina seen by nucleati (#/cm^3)
+   integer  :: ibin
+   real(r8) :: si, log10ns
+   real(r8) :: alum_used(pcols,pver)   ! alumina held in ice (#/kg)
    real(r8) :: osoot_num
    real(r8) :: dso4_num
    real(r8) :: so4_num_ac
@@ -462,6 +498,7 @@ subroutine nucleate_ice_cam_calc( &
    real(r8) :: INnso4(pcols,pver)   ! #/m3, so4 aerosol number used for ice nucleation
    real(r8) :: INnbc(pcols,pver)    ! #/m3, bc aerosol number used for ice nucleation
    real(r8) :: INndust(pcols,pver)  ! #/m3, dust aerosol number used for ice nucleation
+   real(r8) :: INnalum(pcols,pver)  ! #/m3, alumina number added for ice nucleation
    real(r8) :: INondust(pcols,pver)  ! #/m3, dust aerosol number used for ice nucleation
    real(r8) :: INhet(pcols,pver)    ! #/m3, ice number from het freezing
    real(r8) :: INhom(pcols,pver)    ! #/m3, ice number from hom freezing
@@ -480,6 +517,14 @@ subroutine nucleate_ice_cam_calc( &
 
    lchnk = state%lchnk
    ncol  = state%ncol
+
+   INnalum(:,:) = 0._r8
+   alum_used(:,:) = 0._r8
+   if (nucleate_ice_alum) then
+      do k = top_lev, pver
+         alum_used(:ncol,k) = min(state%q(:ncol,k,alum_used_idx), state%q(:ncol,k,numice_idx))
+      end do
+   end if
    t     => state%t
    qn    => state%q(:,:,1)
    qc    => state%q(:,:,cldliq_idx)
@@ -717,13 +762,36 @@ subroutine nucleate_ice_cam_calc( &
             ! *** Turn off soot nucleation ***
             soot_num = 0.0_r8
 
+            ! Only active particles not already held in ice can nucleate.
+            alum_add = 0._r8
+            if (nucleate_ice_alum .and. t(i,k) <= tmelt - 37._r8) then
+               si = relhum(i,k)*svp_water(t(i,k))/svp_ice(t(i,k))*subgrid(i,k)
+               log10ns = alum_log10ns(t(i,k) - tmelt, si)
+               if (log10ns > 0._r8) then
+                  do ibin = 1, nalum_bin
+                     alum_add = alum_add + state%q(i,k,alum_idx(ibin))*alum_invmass(ibin) &
+                                * (1._r8 - exp(-10._r8**log10ns * alum_area(ibin)))
+                  end do
+                  alum_add = max(0._r8, alum_add - alum_used(i,k))*rho(i,k)*1.0e-6_r8
+               end if
+            end if
+            dst_num_nuc = dst_num + alum_add
+
             call nucleati( &
                wsubi(i,k), t(i,k), pmid(i,k), relhum(i,k), icldm(i,k),   &
                qc(i,k), qi(i,k), ni(i,k), rho(i,k),                      &
-               so4_num, dst_num, soot_num, subgrid(i,k),                 &
+               so4_num, dst_num_nuc, soot_num, subgrid(i,k),             &
                naai(i,k), nihf(i,k), niimm(i,k), nidep(i,k), nimey(i,k), &
                wice(i,k), weff(i,k), fhom(i,k), regm(i,k),               &
                oso4_num, odst_num, osoot_num)
+
+            ! Only the real dust share of what nucleated moves to cloudborne below.
+            if (alum_add > 0._r8) then
+               INnalum(i,k) = alum_add*1e6_r8
+               alum_used(i,k) = alum_used(i,k) + (odst_num * alum_add / dst_num_nuc) * icldm(i,k) &
+                                                 / rho(i,k) / 1e-6_r8
+               odst_num = odst_num * dst_num / dst_num_nuc
+            end if
 
             ! Move aerosol used for nucleation from interstial to cloudborne, 
             ! otherwise the same coarse mode aerosols will be available again
@@ -827,6 +895,13 @@ subroutine nucleate_ice_cam_calc( &
 
    end if
 
+   if (nucleate_ice_alum) then
+      do k = top_lev, pver
+         ptend%q(:ncol,k,alum_used_idx) = (alum_used(:ncol,k) - state%q(:ncol,k,alum_used_idx)) / dtime
+      end do
+      call outfld('ALUMUSED', alum_used, pcols, lchnk)
+   end if
+
    call outfld('NIHF',   nihf, pcols, lchnk)
    call outfld('NIIMM', niimm, pcols, lchnk)
    call outfld('NIDEP', nidep, pcols, lchnk)
@@ -842,6 +917,7 @@ subroutine nucleate_ice_cam_calc( &
       call outfld('INnso4  ',INnso4 , pcols,lchnk)
       call outfld('INnbc   ',INnbc  , pcols,lchnk)
       call outfld('INndust ',INndust, pcols,lchnk)
+      call outfld('INnalum ',INnalum, pcols,lchnk)
       call outfld('INondust ',INondust, pcols,lchnk)
       call outfld('INhet   ',INhet  , pcols,lchnk)
       call outfld('INhom   ',INhom  , pcols,lchnk)
@@ -852,5 +928,79 @@ subroutine nucleate_ice_cam_calc( &
 end subroutine nucleate_ice_cam_calc
 
 !================================================================================================
+
+!================================================================================================
+
+subroutine alum_init()
+
+   ! Find the CRALUM constituents and set particle area and mass from the CARMA bins.
+
+   use carma_intr, only: carma_get_group_rmass
+
+   real(r8), allocatable :: rmass(:)  ! particle mass by bin (g)
+   real(r8), parameter   :: rhoalum = 3.95_r8  ! g/cm3
+   real(r8) :: diam
+   integer  :: ibin, idx
+   character(len=8) :: name
+
+   call cnst_get_ind('ALUMUSED', alum_used_idx)
+   lq(alum_used_idx) = .true.
+
+   call carma_get_group_rmass('CRALUM', rmass)
+   if (.not. allocated(rmass)) call endrun('nucleate_ice_cam: alumina needs a CARMA alumina model')
+   nalum_bin = size(rmass)
+   allocate(alum_idx(nalum_bin), alum_area(nalum_bin), alum_invmass(nalum_bin))
+
+   do ibin = 1, nalum_bin
+      write(name, '(A, I2.2)') 'CRALUM', ibin
+      call cnst_get_ind(name, idx)
+      alum_idx(ibin) = idx
+
+      diam = 0.02_r8 * (3._r8*rmass(ibin)/(4._r8*pi*rhoalum))**(1._r8/3._r8)  ! m
+      alum_area(ibin)    = pi*diam*diam
+      alum_invmass(ibin) = 1._r8 / (rmass(ibin)*1.e-3_r8)
+      if (masterproc) write(iulog,*) 'nucleate_ice alumina bin, diam (m) = ', ibin, diam
+   end do
+
+end subroutine alum_init
+
+!================================================================================================
+
+real(r8) function alum_log10ns(tc, si)
+
+   ! log10 of alumina active site density (m-2), or -1 where alumina is inactive.
+   ! T is held at the ends of the data range, and Si at its upper end.
+
+   real(r8), intent(in) :: tc  ! temperature (C)
+   real(r8), intent(in) :: si  ! saturation ratio over ice
+
+   integer  :: n
+   real(r8) :: a, b, w, top
+
+   alum_log10ns = -1._r8
+   if (si < alum_si_lo .and. (.not. nucleate_ice_alum_lowrhi .or. si < alum_si_onset)) return
+
+   if (tc >= alum_tc(1)) then
+      a = alum_a(1); b = alum_b(1)
+   else if (tc <= alum_tc(nalum_t)) then
+      a = alum_a(nalum_t); b = alum_b(nalum_t)
+   else
+      n = 1
+      do while (tc < alum_tc(n+1))
+         n = n + 1
+      end do
+      w = (alum_tc(n) - tc) / (alum_tc(n) - alum_tc(n+1))
+      a = (1._r8 - w)*alum_a(n) + w*alum_a(n+1)
+      b = (1._r8 - w)*alum_b(n) + w*alum_b(n+1)
+   end if
+
+   if (si >= alum_si_lo) then
+      alum_log10ns = a + b*min(si, alum_si_hi)
+   else
+      top = a + b*alum_si_lo
+      alum_log10ns = alum_log10nsonset + (top - alum_log10nsonset)*(si - alum_si_onset)/(alum_si_lo - alum_si_onset)
+   end if
+
+end function alum_log10ns
 
 end module nucleate_ice_cam
